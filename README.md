@@ -1,14 +1,20 @@
-# valthree
+# valkey + S3 = valthree
 
-Valthree is a highly-available Valkey- and Redis-compatible database backed by S3.
+Valthree is a Valkey- and Redis-compatible database backed by S3.
+Unlike traditional implementations, Valthree servers are stateless and designed to run behind a load balancer.
 Clusters are strongly consistent and only acknowledge writes after they've been persisted to object storage.
-Applications may connect to a Valthree cluster using any Valkey or Redis client library.
+
+Applications connect to a Valthree cluster using any Valkey or Redis client library.
+Valthree supports the `GET`, `SET`, `DEL`, `EXISTS`, `KEYS *`, `FLUSHALL`, `PING`, and `QUIT` commands.
+
+## Motivation
 
 We built Valthree to show off [Antithesis][antithesis], our platform for testing distributed systems.
-So while Valthree is rigorously tested for correctness, it doesn't support the full Valkey API or optimize for throughput, latency, or cost.
-Instead, we've intentionally kept this project small and simple.
+So rather than maximizing performance, minimizing operating costs, or implementing the full Valkey API, we've intentionally kept this project simple:
+it's real enough to have bugs, but small enough to understand quickly.
 
-To see a mission-critical distributed database tested with Antithesis, head over to [etcd][etcd-antithesis].
+For more on Valthree's design, testing strategy, and Antithesis integration, read on.
+If you'd rather see a mission-critical distributed database tested with Antithesis, head over to [etcd][etcd-antithesis].
 
 ## Design
 
