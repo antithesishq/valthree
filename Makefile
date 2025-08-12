@@ -17,7 +17,7 @@ all: ## Build, test, and lint (default)
 
 .PHONY: test
 test: build ## Run tests
-	go test -vet=off -race -cover ./...
+	go test -vet=off -race ./...
 	go test -fuzz . -fuzztime=30s .
 
 .PHONY: build
