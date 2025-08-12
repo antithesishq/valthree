@@ -1,0 +1,17 @@
+name: Antithesis
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "15 22 * * *"
+  workflow_dispatch: {} # support manual runs
+permissions:
+  contents: read
+jobs:
+  Test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dummy
+        run: exit 1

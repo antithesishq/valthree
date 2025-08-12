@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -22,7 +21,6 @@ type storage struct {
 	bucket  string
 	name    string
 
-	mu     sync.Mutex // serializing ops reduces retries
 	client *s3.Client
 }
 
@@ -40,9 +38,6 @@ func (s *storage) EnsureBucketExists() error {
 }
 
 func (s *storage) MutateDB(f func(map[string]string) (int, error)) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	for {
 		items, etag, err := s.getDB()
 		if err != nil {
@@ -64,9 +59,6 @@ func (s *storage) MutateDB(f func(map[string]string) (int, error)) (int, error) 
 }
 
 func (s *storage) GetDB() (map[string]string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	items, _, err := s.getDB()
 	return items, err
 }
