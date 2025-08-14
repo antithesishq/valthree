@@ -1,9 +1,11 @@
 # valkey + S3 = valthree
 
-Valthree is a Valkey- and Redis-compatible database backed by S3.
+**Valthree is a Valkey- and Redis-compatible database backed by S3.**
 Unlike traditional implementations, Valthree servers are stateless and designed to run behind a load balancer.
 Clusters offer [strong serializable consistency][strong-serializable] and only acknowledge writes after they've been persisted to object storage, so Valthree is usable as both a persistent cache and a primary database.
-Applications connect to a Valthree cluster using any Valkey or Redis client library and may issue the `GET`, `SET`, `DEL`, `FLUSHALL`, `PING`, and `QUIT` commands.
+
+Applications connect to a Valthree cluster using any Valkey or Redis client library.
+Clusters support the `GET`, `SET`, `DEL`, `FLUSHALL`, `PING`, and `QUIT` commands.
 
 ## Motivation
 
