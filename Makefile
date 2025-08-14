@@ -18,11 +18,11 @@ all: ## Build, test, and lint (default)
 .PHONY: test
 test: build ## Run tests
 	go test -vet=off -race ./...
-	go test -fuzz . -fuzztime=30s .
 
 .PHONY: build
 build: ## Build all packages
 	go build ./...
+	go build -o valthree .
 
 .PHONY: lint
 lint: ## Lint Go

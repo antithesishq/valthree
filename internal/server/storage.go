@@ -27,7 +27,7 @@ type storage struct {
 }
 
 func (s *storage) EnsureBucketExists() error {
-	_, err := s.client.CreateBucket(context.TODO(), &s3.CreateBucketInput{
+	_, err := s.client.CreateBucket(context.Background(), &s3.CreateBucketInput{
 		Bucket: aws.String(s.bucket),
 	})
 	if err != nil {
@@ -120,8 +120,7 @@ func (s *storage) setDB(items map[string]string, etag string) error {
 	_, err = s.client.PutObject(ctx, input)
 	if err != nil {
 		var apiErr smithy.APIError
-		if errors.As(err, &apiErr) {
-			fmt.Println(err.Error()) // FIXME, don't know correct code
+		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "PreconditionFailed" {
 			return errMismatchedETag
 		}
 		return fmt.Errorf("put object: %v", err)

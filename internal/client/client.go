@@ -1,12 +1,17 @@
-// Package client provides a more convenient wrapper around the redigo client.
+// Package client provides a more convenient wrapper around a redigo connection.
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net"
 
 	"github.com/gomodule/redigo/redis"
 )
+
+// ErrNotFound signals that the key used in a GET or DEL command was
+// not present in the database.
+var ErrNotFound = errors.New("key not found")
 
 // Client is a type-safe, lower-boilerplate wrapper around the redigo client. It
 // doesn't have all the flexibility of a plain redigo connection, but it
@@ -60,6 +65,9 @@ func (c *Client) Get(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if res == nil {
+		return "", ErrNotFound
+	}
 	r, ok := res.([]byte)
 	if !ok {
 		return "", fmt.Errorf("unexpected get response type: %T", res)
@@ -96,17 +104,12 @@ func (c *Client) Set(key, value string) error {
 	return nil
 }
 
-// Del deletes one or more keys. It returns an error if the server reports fewer
-// keys deleted than requested.
-func (c *Client) Del(keys ...string) error {
+// Del deletes a key.
+func (c *Client) Del(key string) error {
 	if c.connErr != nil {
 		return fmt.Errorf("conn unusable: %w", c.connErr)
 	}
-	args := make([]any, len(keys))
-	for i, k := range keys {
-		args[i] = k
-	}
-	res, err := c.conn.Do("DEL", args...)
+	res, err := c.conn.Do("DEL", key)
 	if err != nil {
 		return err
 	}
@@ -114,8 +117,11 @@ func (c *Client) Del(keys ...string) error {
 	if !ok {
 		return fmt.Errorf("unexpected del response type: %T", res)
 	}
-	if r != int64(len(keys)) {
-		return fmt.Errorf("unexpected del response: %d", r)
+	if r > 1 {
+		return fmt.Errorf("server returned %d for single-key DEL", r)
+	}
+	if r == 0 {
+		return ErrNotFound
 	}
 	if err := c.conn.Err(); err != nil {
 		c.connErr = err
@@ -123,61 +129,6 @@ func (c *Client) Del(keys ...string) error {
 		return fmt.Errorf("conn unusable: %w", err)
 	}
 	return nil
-}
-
-// Exists checks if all the supplied keys exist.
-func (c *Client) Exists(keys ...string) (bool, error) {
-	if c.connErr != nil {
-		return false, fmt.Errorf("conn unusable: %w", c.connErr)
-	}
-	args := make([]any, len(keys))
-	for i, k := range keys {
-		args[i] = k
-	}
-	res, err := c.conn.Do("EXISTS", args...)
-	if err != nil {
-		return false, err
-	}
-	r, ok := res.(int64)
-	if !ok {
-		return false, fmt.Errorf("unexpected exists response type: %T", res)
-	}
-	if err := c.conn.Err(); err != nil {
-		c.connErr = err
-		_ = c.conn.Close()
-		return false, fmt.Errorf("conn unusable: %w", err)
-	}
-	return r == int64(len(keys)), nil
-}
-
-// Keys returns all keys in the database. Under the hood, it sends "KEYS *" to
-// the database.
-func (c *Client) Keys() ([]string, error) {
-	if c.connErr != nil {
-		return nil, fmt.Errorf("conn unusable: %w", c.connErr)
-	}
-	res, err := c.conn.Do("KEYS", "*")
-	if err != nil {
-		return nil, err
-	}
-	r, ok := res.([]any)
-	if !ok {
-		return nil, fmt.Errorf("unexpected keys response type: %T", res)
-	}
-	keys := make([]string, len(r))
-	for i, key := range r {
-		k, ok := key.([]byte)
-		if !ok {
-			return nil, fmt.Errorf("unexpected keys response element type: %T", key)
-		}
-		keys[i] = string(k)
-	}
-	if err := c.conn.Err(); err != nil {
-		c.connErr = err
-		_ = c.conn.Close()
-		return nil, fmt.Errorf("conn unusable: %w", err)
-	}
-	return keys, nil
 }
 
 // FlushAll deletes all keys in the database.

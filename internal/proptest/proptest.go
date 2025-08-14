@@ -1,0 +1,229 @@
+// Package proptest provides utilities for writing property-based tests for
+// Valthree servers.
+package proptest
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"math/rand/v2"
+	"slices"
+	"time"
+
+	"github.com/anishathalye/porcupine"
+	"github.com/antithesishq/valthree/internal/client"
+	"github.com/antithesishq/valthree/internal/diceware"
+	"github.com/antithesishq/valthree/internal/op"
+	"github.com/antithesishq/valthree/internal/set"
+)
+
+// Error is sometimes returned from CheckWorkloads, indicating that
+// verification timed out or that the observed behavior includes consistency
+// violations.
+//
+// If the Error indicates a consistency violation, Visualization will be an
+// interactive, self-contained HTML document demonstrating the violation.
+type Error struct {
+	Key           string
+	TimedOut      bool
+	Visualization *bytes.Buffer
+}
+
+// Error implements error.
+func (e *Error) Error() string {
+	if e.TimedOut {
+		return fmt.Sprintf("%s: model timed out", e.Key)
+	}
+	return fmt.Sprintf("%s: history not linearizable", e.Key)
+}
+
+// Arguments for calling a client; used in the porcupine model below.
+type args struct {
+	Op    op.Op
+	Key   string
+	Value string
+}
+
+// Results from calling a client; used in the porcupine model below.
+type rets struct {
+	Value string
+	Err   error
+}
+
+// GenWorkloads generates a workload for a variable number of clients.
+func GenWorkloads(scale int, r *rand.Rand) [][]porcupine.Operation {
+	if scale <= 0 {
+		panic(fmt.Sprintf("scale must be positive: got %d", scale))
+	}
+	// To trigger consistency bugs, we want many clients using few keys.
+	keys := make([]string, r.IntN(4*scale)+1)
+	for i := range keys {
+		keys[i] = fmt.Sprintf("key%d", i)
+	}
+	numClientsPerKey := r.IntN(4*scale) + 2
+	// Scale up ops/client faster than keys or clients.
+	opsPerClient := r.IntN(128*scale*scale) + 128
+	workloads := make([][]porcupine.Operation, len(keys)*numClientsPerKey)
+	// Bias the workload towards GET and SET.
+	ops := []op.Op{
+		op.Get,
+		op.Get,
+		op.Get,
+		op.Set,
+		op.Set,
+		op.Del,
+	}
+	for clientId := range workloads {
+		key := keys[clientId%len(keys)]
+		workload := make([]porcupine.Operation, opsPerClient)
+		for i := range workload {
+			workload[i] = porcupine.Operation{
+				ClientId: clientId,
+				Input: &args{
+					Op:    ops[r.IntN(len(ops))],
+					Key:   key,
+					Value: diceware.GenWord(r),
+				},
+				Output: &rets{},
+			}
+		}
+		workloads[clientId] = workload
+	}
+	return workloads
+}
+
+// RunWorkload runs a workload on a client.
+func RunWorkload(client *client.Client, workload []porcupine.Operation) {
+	for i := range workload {
+		in := workload[i].Input.(*args)
+		out := workload[i].Output.(*rets)
+		workload[i].Call = time.Now().UnixNano()
+		switch in.Op {
+		case op.Get:
+			out.Value, out.Err = client.Get(in.Key)
+		case op.Set:
+			out.Err = client.Set(in.Key, in.Value)
+		case op.Del:
+			out.Err = client.Del(in.Key)
+		default:
+			panic(fmt.Sprintf("run unknown op %s", in.Op))
+		}
+		workload[i].Return = time.Now().UnixNano()
+	}
+}
+
+// CheckWorkloads verifies that the real-world behavior of the Valthree server,
+// as seen by RunWorkload, satisfies strong serializable consistency.
+//
+// Verification is NP-hard, so it may time out. If verification fails or times
+// out, the returned error will be an *Error.
+func CheckWorkloads(deadline time.Duration, workloads [][]porcupine.Operation) error {
+	// Valthree keys are linearizable. If we've broken something, it's painful to
+	// debug the whole workload. Instead, partition the execution history by key
+	// and check each partition individually. (Porcupine supports this via
+	// Model.Partition, but we have to do it ourselves if we also want to
+	// restrict the visualization to a single key.)
+	partitioned := make(map[string][]porcupine.Operation)
+	for _, history := range workloads {
+		for _, op := range history {
+			in := op.Input.(*args)
+			partitioned[in.Key] = append(partitioned[in.Key], op)
+		}
+	}
+
+	for key, history := range partitioned {
+		model := newModel()
+		cr, info := porcupine.CheckOperationsVerbose(model, history, deadline)
+		if cr == porcupine.Ok {
+			continue
+		}
+		if cr == porcupine.Unknown {
+			return &Error{Key: key, TimedOut: true}
+		}
+		var buf bytes.Buffer
+		if err := porcupine.Visualize(model, info, &buf); err != nil {
+			return err
+		}
+		return &Error{Key: key, Visualization: &buf}
+	}
+	return nil
+}
+
+func newModel() porcupine.Model {
+	return porcupine.Model{
+		Init: func() any { return set.New() },
+		Step: func(state, input, output any) (bool, any) {
+			in := input.(*args)
+			out := output.(*rets)
+			db := state.(*set.Set)
+			switch in.Op {
+			case op.Get:
+				if out.Err != nil {
+					if errors.Is(out.Err, client.ErrNotFound) {
+						// Missing keys may be represented by an empty set or a set
+						// containing the empty string.
+						return db.Contains("") || db.Len() == 0, db
+					}
+					// Other failures are always okay
+					return true, db
+				}
+				return db.Contains(out.Value), db
+			case op.Set:
+				if out.Value != "" {
+					panic(fmt.Sprintf("value returned for SET %s %s", in.Key, in.Value))
+				}
+				if out.Err != nil {
+					// Write may have succeeded, so we expand the set of valid values.
+					return true, db.With(in.Value)
+				}
+				// Write definitely succeeded, so there's only one valid value.
+				return true, set.New(in.Value)
+			case op.Del:
+				if out.Value != "" {
+					panic(fmt.Sprintf("value returned for DEL %s", in.Key))
+				}
+				if out.Err != nil {
+					// Delete may have succeeded: represent the potential absence
+					// of the key with an empty string.
+					return true, db.With("")
+				}
+				// Delete definitely succeeded, so the key must be missing.
+				return true, set.New()
+			default:
+				panic(fmt.Sprintf("describe unknown op %s", in.Op))
+			}
+		},
+		DescribeOperation: func(input, output any) string {
+			return describe(input.(*args), output.(*rets))
+		},
+		Equal: func(left, right any) bool {
+			if left == nil || right == nil {
+				return left == right
+			}
+			l := left.(*set.Set)
+			r := right.(*set.Set)
+			return slices.Equal(l.Items(), r.Items())
+		},
+	}
+}
+
+func describe(in *args, out *rets) string {
+	result := out.Value
+	if result == "" {
+		result = "OK"
+	}
+	if out.Err != nil {
+		result = fmt.Sprintf("ERR %v", out.Err)
+	}
+
+	switch in.Op {
+	case op.Get:
+		return fmt.Sprintf("GET %s = %s", in.Key, result)
+	case op.Set:
+		return fmt.Sprintf("SET %s %s = %s", in.Key, in.Value, result)
+	case op.Del:
+		return fmt.Sprintf("DEL %s = %s", in.Key, result)
+	default:
+		panic(fmt.Sprintf("describe unknown op %s", in.Op))
+	}
+}

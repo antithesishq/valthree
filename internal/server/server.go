@@ -2,10 +2,8 @@ package server
 
 import (
 	"fmt"
-	"maps"
 	"net"
 	"net/http"
-	"slices"
 	"time"
 
 	"github.com/antithesishq/valthree/internal/op"
@@ -90,10 +88,6 @@ func (s *Server) handle(conn redcon.Conn, cmd redcon.Command) {
 		s.set(conn, args)
 	case op.Del:
 		s.del(conn, args)
-	case op.Exists:
-		s.exists(conn, args)
-	case op.Keys:
-		s.keys(conn, args)
 	case op.FlushAll:
 		s.flushAll(conn, args)
 	case op.Ping:
@@ -128,12 +122,26 @@ func (s *Server) get(conn redcon.Conn, args []string) {
 		conn.WriteNull()
 		return
 	}
+	if val == "" {
+		// See set: explicitly storing empty values is forbidden.
+		writeErr(conn, fmt.Errorf("database contains empty value for string %s", args[0])) // unreachable
+		return
+	}
 	conn.WriteBulkString(val)
 }
 
 func (s *Server) set(conn redcon.Conn, args []string) {
 	if len(args) != 2 {
 		writeErrArity(conn, op.Set)
+		return
+	}
+	// Valkey allows SET'ing values to the empty string, but this makes our test
+	// model more complex - we can't model the allowable values for a key as a
+	// set of strings, because we don't have a value to represent the key being
+	// absent. This is a demo project, so we'll disallow empty values to keep
+	// the model simple.
+	if args[1] == "" {
+		writeErr(conn, fmt.Errorf("empty value"))
 		return
 	}
 
@@ -153,21 +161,21 @@ func (s *Server) set(conn redcon.Conn, args []string) {
 }
 
 func (s *Server) del(conn redcon.Conn, args []string) {
-	if len(args) == 0 {
+	// Valkey allows DEL'ing multiple keys in one call, but that makes it harder
+	// to model the DB as a collection of independent registers. To keep this
+	// project simple, restrict DEL to one key at a time.
+	if len(args) != 1 {
 		writeErrArity(conn, op.Del)
 		return
 	}
 
 	n, err := s.storage.MutateDB(func(items map[string]string) (int, error) {
-		var n int
-		for _, k := range args {
-			_, ok := items[k]
-			if ok {
-				n++
-			}
-			delete(items, k)
+		_, ok := items[args[0]]
+		delete(items, args[0])
+		if ok {
+			return 1, nil
 		}
-		return n, nil
+		return 0, nil
 	})
 
 	if err != nil {
@@ -175,51 +183,6 @@ func (s *Server) del(conn redcon.Conn, args []string) {
 		return
 	}
 	conn.WriteInt(n)
-}
-
-func (s *Server) exists(conn redcon.Conn, args []string) {
-	if len(args) == 0 {
-		writeErrArity(conn, op.Exists)
-		return
-	}
-
-	items, err := s.storage.GetDB()
-	if err != nil {
-		writeErr(conn, err)
-		return
-	}
-
-	var n int
-	for _, k := range args {
-		_, ok := items[k]
-		if ok {
-			n++
-		}
-	}
-	conn.WriteInt(n)
-}
-
-func (s *Server) keys(conn redcon.Conn, args []string) {
-	if len(args) != 1 {
-		writeErrArity(conn, op.Keys)
-		return
-	}
-	if args[0] != "*" {
-		conn.WriteError("ERR only supported glob is '*'")
-		return
-	}
-
-	items, err := s.storage.GetDB()
-	if err != nil {
-		writeErr(conn, err)
-		return
-	}
-
-	keys := slices.Collect(maps.Keys(items))
-	conn.WriteArray(len(keys))
-	for _, k := range keys {
-		conn.WriteBulkString(k)
-	}
 }
 
 func (s *Server) flushAll(conn redcon.Conn, args []string) {

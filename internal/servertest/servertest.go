@@ -21,11 +21,11 @@ import (
 // Under the hood, New uses testcontainers to start a MinIO container for the
 // Valthree server's storage. The MinIO container is also cleaned up when the test
 // completes.
-func New(tb testing.TB) *client.Client {
+func New(tb testing.TB) func() *client.Client {
 	tb.Helper()
 
 	const user, password = "admin", "password"
-	tb.Logf("starting MinIO  container")
+	// The MinIO testcontainers module includes verbose test logs by default.
 	mc, err := minio.Run(
 		tb.Context(),
 		"minio/minio:RELEASE.2025-07-23T15-54-02Z",
@@ -33,7 +33,6 @@ func New(tb testing.TB) *client.Client {
 		minio.WithPassword(password),
 	)
 	attest.Ok(tb, err, attest.Sprint("start MinIO container"))
-	tb.Logf("MinIO  container started")
 	addr, err := mc.ConnectionString(tb.Context())
 	attest.Ok(tb, err, attest.Sprint("get MinIO conn str"))
 
@@ -64,19 +63,19 @@ func New(tb testing.TB) *client.Client {
 		wg.Wait()
 	})
 
-	client, err := client.New(ln.Addr())
-	attest.Ok(tb, err, attest.Sprint("client dial"))
-	tb.Cleanup(func() {
-		attest.Ok(tb, client.Close(), attest.Sprint("client close"))
-	})
-	tb.Logf("attempting to ping redcon server")
-	for {
-		if err := client.Ping(); err == nil {
-			tb.Logf("redcon server ping successful")
-			return client
+	return func() *client.Client {
+		client, err := client.New(ln.Addr())
+		attest.Ok(tb, err, attest.Sprint("client dial"))
+		tb.Cleanup(func() {
+			attest.Ok(tb, client.Close(), attest.Sprint("client close"))
+		})
+		for {
+			if err := client.Ping(); err == nil {
+				return client
+			}
+			backoff := 100 * time.Millisecond
+			tb.Logf("redcon server not ready, retrying after %v", backoff)
+			time.Sleep(backoff)
 		}
-		backoff := 100 * time.Millisecond
-		tb.Logf("redcon server not ready, retrying after %v", backoff)
-		time.Sleep(backoff)
 	}
 }
