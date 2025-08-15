@@ -4,6 +4,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 
 	"github.com/gomodule/redigo/redis"
@@ -165,4 +166,11 @@ func (c *Client) Close() error {
 		return err
 	}
 	return nil
+}
+
+// Close the underlying connection and log any errors.
+func (c *Client) CloseAndLog(logger *slog.Logger) {
+	if err := c.Close(); err != nil {
+		logger.Error("close client", "err", err)
+	}
 }
