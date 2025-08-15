@@ -61,14 +61,15 @@ func TestStrongSerializable(t *testing.T) {
 		timeout = time.Until(deadline)
 	}
 	err := proptest.CheckWorkloads(timeout, workloads)
-	if err != nil {
-		t.Log(err)
-		t.Fail()
-		var perr *proptest.Error
-		if errors.As(err, &perr) {
-			if err := os.WriteFile("consistency-failure.html", perr.Visualization.Bytes(), 0644); err != nil {
-				t.Logf("write porcupine visualization: %v", err)
-			}
+	if err == nil {
+		return
+	}
+	t.Log(err)
+	t.Fail()
+	var perr *proptest.Error
+	if errors.As(err, &perr) {
+		if err := os.WriteFile("consistency-failure.html", perr.Visualization.Bytes(), 0644); err != nil {
+			t.Logf("write porcupine visualization: %v", err)
 		}
 	}
 }
