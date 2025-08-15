@@ -26,7 +26,7 @@ var serveCmd = &cobra.Command{
 
 		srv := server.New(server.Config{
 			DatabaseName: orFatal(cmd.Flags().GetString("name")),
-			MaxItems:     orFatal(cmd.Flags().GetInt("max-items")),
+			MaxItems:     orFatal(cmd.Flags().GetInt("max-keys")),
 			S3Endpoint:   orFatal(cmd.Flags().GetString("s3-addr")),
 			S3Region:     orFatal(cmd.Flags().GetString("s3-region")),
 			S3User:       orFatal(cmd.Flags().GetString("s3-user")),
