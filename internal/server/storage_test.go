@@ -58,8 +58,8 @@ func newStorage(tb testing.TB) *storage {
 	addr, err := mc.ConnectionString(tb.Context())
 	attest.Ok(tb, err, attest.Sprint("get MinIO conn str"))
 
-	// We could factor server construction more aggressively to isolate S3 client
-	// creation, but it's simpler to just yank off the unexported storage struct.
+	// We could refactor server construction to isolate S3 client creation, but
+	// it's simpler to just yank off the unexported storage struct.
 	srv := New(Config{
 		DatabaseName: "test",
 		MaxItems:     1024,

@@ -1,0 +1,32 @@
+services:
+  valthree:
+    container_name: valthree
+    hostname: valthree
+    image: valthree:latest
+    init: true
+    depends_on: [minio]
+    healthcheck:
+      test: redis-cli PING
+  workload:
+    container_name: workload
+    hostname: workload
+    image: valthree:latest
+    depends_on: [valthree]
+    init: true
+  minio:
+    container_name: minio
+    hostname: minio
+    image: quay.io/minio/minio
+    command: server /data --console-address ":9001"
+    # volumes:
+    #   - minio_data:/data
+    post_start:
+      - user: "root"
+        command: "mkdir -p /data/primary"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=password
+      - MINIO_DEFAULT_BUCKETS=valthree
