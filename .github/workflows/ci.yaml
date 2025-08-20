@@ -1,4 +1,4 @@
-name: ci
+name: CI
 on:
   push:
     branches: [main]
@@ -10,16 +10,82 @@ on:
 permissions:
   contents: read
 jobs:
-  ci:
+
+  Go:
+    name: Go Build, Test, and Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 1
       - name: Install Go
         uses: actions/setup-go@v5
       - name: Test
         run: make test
       - name: Lint
         run: make lint
+
+  Docker:
+    name: Push Images
+    needs: Go
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+      - name: Initialize Docker
+        uses: docker/setup-buildx-action@v3
+      - name: Login
+        uses: docker/login-action@v3
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: _json_key
+          password: {{ secrets.ANTITHESIS_GAR_KEY }}
+      - name: Extract Metadata
+        id: extract-metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree
+            us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree-config
+          tags: |
+            type=sha
+            demo
+      - name: Build Config
+        id: build-config
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.config
+          push: true
+          tags: {{ steps.extract-metadata.outputs.tags }}
+          labels: {{ steps.extract-metadata.outputs.labels }}
+      - name: Build Valthree
+        id: build-valthree
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.valthree
+          push: true
+          tags: {{ steps.extract-metadata.outputs.tags }}
+          labels: {{ steps.extract-metadata.outputs.labels }}
+
+  Antithesis:
+    name: Antithesis
+    needs: Docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start Test
+        uses: antithesishq/antithesis-trigger-action@main
+        with:
+          notebook_name: demo_go # FIXME
+          tenant: demo
+          username: ${{ secrets.ANTITHESIS_USERNAME }}
+          password: ${{ secrets.ANTITHESIS_PASSWORD }}
+          github_token: ${{ secrets.GH_PAT }}
+          config_image: valthree-config@${{ steps.build-config.outputs.digest }}
+          images: us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree@${{ steps.build-valthree.outputs.digest }};docker.io/minio/minio:RELEASE.2025-07-23T15-54-02Z
+          description: "CI for ${{ github.ref_name }} (commit ${{ github.sha }})"
+          test_name:  ${{ inputs.test }}
+          additional_parameters: |-
+            custom.repo_name=${{ github.repository }}
+            custom.action_name = ${{ github.action }}
+            custom.actor = ${{ github.actor }}
