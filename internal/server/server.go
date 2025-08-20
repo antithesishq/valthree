@@ -1,9 +1,12 @@
+// Package server provides the Valthree server.
 package server
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/antithesishq/valthree/internal/op"
@@ -13,6 +16,7 @@ import (
 	"github.com/tidwall/redcon"
 )
 
+// Config bundles the primitive values that configure a Valthree server.
 type Config struct {
 	DatabaseName string
 	MaxItems     int
@@ -25,13 +29,22 @@ type Config struct {
 	S3Timeout  time.Duration
 }
 
+// Server is the Valthree server: a clustered, Valkey-compatible key-value
+// store backed by object storage.
 type Server struct {
 	maxItems int
-	storage  storage
-	close    func() error // set in ServeTCP
+	store    storage
+
+	mu    sync.Mutex
+	close func() error
 }
 
-func New(cfg Config) *Server {
+// New constructs a Server.
+//
+// Before returning, it ensures that the object storage bucket is created and
+// ready to use; under adversarial conditions, it will retry bucket creation
+// indefinitely.
+func New(cfg Config, logger *slog.Logger) *Server {
 	s3client := s3.New(s3.Options{
 		Region:                     cfg.S3Region,
 		BaseEndpoint:               aws.String(cfg.S3Endpoint),
@@ -44,9 +57,27 @@ func New(cfg Config) *Server {
 			Transport: &http.Transport{},
 		},
 	})
+	store := storage{
+		timeout: cfg.S3Timeout,
+		bucket:  cfg.S3Bucket,
+		name:    cfg.DatabaseName,
+		client:  s3client,
+	}
+	for {
+		logger := logger.With("bucket", cfg.S3Bucket)
+		if err := store.EnsureBucketExists(); err != nil {
+			backoff := time.Second
+			logger.Error("bucket not ready", "err", err, "retry_after", backoff)
+			time.Sleep(backoff)
+			continue
+		}
+		logger.Info("bucket ready")
+		break
+	}
+
 	return &Server{
 		maxItems: cfg.MaxItems,
-		storage: storage{
+		store: storage{
 			timeout: cfg.S3Timeout,
 			bucket:  cfg.S3Bucket,
 			name:    cfg.DatabaseName,
@@ -55,17 +86,19 @@ func New(cfg Config) *Server {
 	}
 }
 
-func (s *Server) EnsureBucketExists() error {
-	return s.storage.EnsureBucketExists()
-}
-
+// ServeTCP accepts connections and serves Valkey requests.
 func (s *Server) ServeTCP(ln net.Listener) error {
 	rs := redcon.NewServerNetwork("tcp", ln.Addr().String(), s.handle, s.accept, s.onClosed)
+	s.mu.Lock()
 	s.close = rs.Close
+	s.mu.Unlock()
 	return rs.Serve(ln)
 }
 
+// Close shuts the server down.
 func (s *Server) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.close == nil {
 		return nil
 	}
@@ -112,7 +145,7 @@ func (s *Server) get(conn redcon.Conn, args []string) {
 		return
 	}
 
-	items, err := s.storage.GetDB()
+	items, err := s.store.GetDB()
 	if err != nil {
 		writeErr(conn, err)
 		return
@@ -145,7 +178,7 @@ func (s *Server) set(conn redcon.Conn, args []string) {
 		return
 	}
 
-	_, err := s.storage.MutateDB(func(items map[string]string) (int, error) {
+	_, err := s.store.MutateDB(func(items map[string]string) (int, error) {
 		if len(items) >= s.maxItems {
 			return 0, fmt.Errorf("at max capacity of %d keys", s.maxItems)
 		}
@@ -169,7 +202,7 @@ func (s *Server) del(conn redcon.Conn, args []string) {
 		return
 	}
 
-	n, err := s.storage.MutateDB(func(items map[string]string) (int, error) {
+	n, err := s.store.MutateDB(func(items map[string]string) (int, error) {
 		_, ok := items[args[0]]
 		delete(items, args[0])
 		if ok {
@@ -191,7 +224,7 @@ func (s *Server) flushAll(conn redcon.Conn, args []string) {
 		return
 	}
 
-	_, err := s.storage.MutateDB(func(items map[string]string) (int, error) {
+	_, err := s.store.MutateDB(func(items map[string]string) (int, error) {
 		clear(items)
 		return 0, nil
 	})

@@ -16,8 +16,8 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().Bool("json", false, "emit logs in JSON")
-	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "emit debug logs")
+	rootCmd.PersistentFlags().Bool("json", false, "emit logs in JSON (default plain text)")
+	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "emit debug logs (default info)")
 }
 
 func main() {

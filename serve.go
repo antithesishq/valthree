@@ -24,28 +24,18 @@ var serveCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		addr := orFatal(cmd.Flags().GetString("addr"))
 		srv := server.New(server.Config{
 			DatabaseName: orFatal(cmd.Flags().GetString("name")),
 			MaxItems:     orFatal(cmd.Flags().GetInt("max-keys")),
 			S3Endpoint:   orFatal(cmd.Flags().GetString("s3-addr")),
 			S3Region:     orFatal(cmd.Flags().GetString("s3-region")),
 			S3User:       orFatal(cmd.Flags().GetString("s3-user")),
-			S3Password:   orFatal(cmd.Flags().GetString("s3-password")),
+			S3Password:   orFatal(cmd.Flags().GetString("s3-pass")),
 			S3Bucket:     orFatal(cmd.Flags().GetString("s3-bucket")),
 			S3Timeout:    orFatal(cmd.Flags().GetDuration("s3-timeout")),
-		})
+		}, logger)
 
-		for {
-			if err := srv.EnsureBucketExists(); err != nil {
-				backoff := time.Second
-				logger.Info("bucket not ready", "err", err, "retry_after", backoff)
-				time.Sleep(backoff)
-				continue
-			}
-			break
-		}
-
-		addr := orFatal(cmd.Flags().GetString("addr"))
 		ln, err := net.Listen("tcp", addr)
 		if err != nil {
 			logger.Error("listen failed", "addr", addr, "err", err)
@@ -78,7 +68,7 @@ func init() {
 	serveCmd.Flags().String("addr", ":6379", "address to listen on")
 	serveCmd.Flags().String("name", "valthree", "database name")
 	serveCmd.Flags().Int("max-keys", 16384, "maximum number of stored keys")
-	serveCmd.Flags().String("s3-addr", "minio:9000", "object storage address")
+	serveCmd.Flags().String("s3-addr", "http://minio:9000", "object storage address")
 	serveCmd.Flags().String("s3-region", "us-east-1", "object storage region")
 	serveCmd.Flags().String("s3-bucket", "valthree", "object storage bucket")
 	serveCmd.Flags().String("s3-user", "admin", "object storage user")

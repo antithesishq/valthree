@@ -3,6 +3,7 @@ package servertest
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"testing"
@@ -14,15 +15,13 @@ import (
 	"go.akshayshah.org/attest"
 )
 
-// New starts a new Valthree server on an ephemeral port and returns a
-// ready-to-use client. The server and client are automatically cleaned up when
-// the test completes.
-//
-// Under the hood, New uses testcontainers to start a MinIO container for the
-// Valthree server's storage. The MinIO container is also cleaned up when the test
-// completes.
-func New(tb testing.TB) func() *client.Client {
+// NewCluster creates a Valthree cluster and returns ready-to-use clients. The
+// clients, Valthree servers, and backing MinIO storage are automatically
+// cleaned up when the test completes. As long as numClients is greater than
+// one, the Valthree cluster has multiple nodes.
+func NewCluster(tb testing.TB, numClients int) []*client.Client {
 	tb.Helper()
+	attest.True(tb, numClients > 0, attest.Sprintf("num clients must be positive"))
 
 	const user, password = "admin", "password"
 	// The MinIO testcontainers module includes verbose test logs by default.
@@ -36,46 +35,67 @@ func New(tb testing.TB) func() *client.Client {
 	addr, err := mc.ConnectionString(tb.Context())
 	attest.Ok(tb, err, attest.Sprint("get MinIO conn str"))
 
-	srv := server.New(server.Config{
-		DatabaseName: "test",
-		MaxItems:     1024,
-		S3Endpoint:   fmt.Sprintf("http://%s", addr),
-		S3Region:     "us-east-1",
-		S3User:       user,
-		S3Password:   password,
-		S3Bucket:     "valthree",
-		S3Timeout:    time.Second,
-	})
-	attest.Ok(tb, srv.EnsureBucketExists(), attest.Sprint("create bucket"))
+	numServers := 1
+	if numClients > 1 {
+		numServers = numClients / 2
+	}
 
-	ln, err := net.Listen("tcp", "localhost:0") // closed by redcon server
-	attest.Ok(tb, err, attest.Sprint("listen on ephemeral port"))
+	logger := NewLogger(tb)
+	serverAddrs := make([]net.Addr, numServers)
+	for i := range serverAddrs {
+		srv := server.New(server.Config{
+			DatabaseName: "test",
+			MaxItems:     1024,
+			S3Endpoint:   fmt.Sprintf("http://%s", addr),
+			S3Region:     "us-east-1",
+			S3User:       user,
+			S3Password:   password,
+			S3Bucket:     "valthree",
+			S3Timeout:    time.Second,
+		}, NewLogger(tb))
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	tb.Logf("starting redcon server")
-	go func() {
-		defer wg.Done()
-		attest.Ok(tb, srv.ServeTCP(ln), attest.Sprint("redcon serve"))
-	}()
-	tb.Cleanup(func() {
-		attest.Ok(tb, srv.Close(), attest.Sprint("redcon close"))
-		wg.Wait()
-	})
+		ln, err := net.Listen("tcp", "localhost:0") // closed by redcon server
+		attest.Ok(tb, err, attest.Sprint("listen on ephemeral port"))
 
-	return func() *client.Client {
-		client, err := client.New(ln.Addr())
+		var wg sync.WaitGroup
+		logger.Debug("starting redcon server", "server_id", i, "addr", ln.Addr())
+		wg.Go(func() {
+			attest.Ok(tb, srv.ServeTCP(ln), attest.Sprint("redcon serve"))
+		})
+		tb.Cleanup(func() {
+			attest.Ok(tb, srv.Close(), attest.Sprint("redcon close"))
+			wg.Wait()
+		})
+		serverAddrs[i] = ln.Addr()
+	}
+
+	clients := make([]*client.Client, numClients)
+	for i := range clients {
+		addr := serverAddrs[i%len(serverAddrs)]
+		client, err := client.New(addr)
 		attest.Ok(tb, err, attest.Sprint("client dial"))
 		tb.Cleanup(func() {
 			attest.Ok(tb, client.Close(), attest.Sprint("client close"))
 		})
 		for {
 			if err := client.Ping(); err == nil {
-				return client
+				break
 			}
 			backoff := 100 * time.Millisecond
-			tb.Logf("redcon server not ready, retrying after %v", backoff)
+			logger.Debug("redcon server not ready", "addr", addr, "retry_after", backoff)
 			time.Sleep(backoff)
 		}
+		clients[i] = client
 	}
+	return clients
+}
+
+// NewLogger creates a structured logger that writes to the supplied
+// testing.TB.
+func NewLogger(tb testing.TB) *slog.Logger {
+	handler := slog.NewTextHandler(tb.Output(), &slog.HandlerOptions{
+		AddSource: false,
+		Level:     slog.LevelDebug,
+	})
+	return slog.New(handler)
 }

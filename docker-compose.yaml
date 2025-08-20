@@ -1,8 +1,45 @@
 services:
-  valthree:
-    container_name: valthree
-    hostname: valthree
+  valthree0:
+    container_name: valthree0
+    hostname: valthree0
     image: valthree:latest
+    entrypoint:
+      - "/usr/local/bin/valthree"
+      - "serve"
+      - "-v"
+      - "--json"
+    pull_policy: missing
+    build: .
+    init: true
+    depends_on: [minio]
+    healthcheck:
+      test: redis-cli PING
+  valthree1:
+    container_name: valthree1
+    hostname: valthree1
+    image: valthree:latest
+    entrypoint:
+      - "/usr/local/bin/valthree"
+      - "serve"
+      - "-v"
+      - "--json"
+    pull_policy: missing
+    build: .
+    init: true
+    depends_on: [minio]
+    healthcheck:
+      test: redis-cli PING
+  valthree2:
+    container_name: valthree2
+    hostname: valthree2
+    image: valthree:latest
+    entrypoint:
+      - "/usr/local/bin/valthree"
+      - "serve"
+      - "-v"
+      - "--json"
+    pull_policy: missing
+    build: .
     init: true
     depends_on: [minio]
     healthcheck:
@@ -11,15 +48,22 @@ services:
     container_name: workload
     hostname: workload
     image: valthree:latest
-    depends_on: [valthree]
+    entrypoint:
+      - "/usr/local/bin/valthree"
+      - "workload"
+      # - "-v"
+      - "--json"
+      - "--addrs"
+      - "valthree0:6379,valthree1:6379,valthree2:6379"
+    depends_on: [valthree0, valthree1, valthree2]
     init: true
   minio:
     container_name: minio
     hostname: minio
     image: quay.io/minio/minio
     command: server /data --console-address ":9001"
-    # volumes:
-    #   - minio_data:/data
+    volumes:
+      - minio_data:/data
     post_start:
       - user: "root"
         command: "mkdir -p /data/primary"
@@ -30,3 +74,6 @@ services:
       - MINIO_ROOT_USER=admin
       - MINIO_ROOT_PASSWORD=password
       - MINIO_DEFAULT_BUCKETS=valthree
+
+volumes:
+  minio_data:

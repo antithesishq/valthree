@@ -12,80 +12,125 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/antithesishq/antithesis-sdk-go/assert"
+	"github.com/antithesishq/antithesis-sdk-go/lifecycle"
 	"github.com/antithesishq/valthree/internal/client"
 	"github.com/antithesishq/valthree/internal/proptest"
 	"github.com/spf13/cobra"
 )
 
+func init() {
+	rootCmd.AddCommand(workloadCmd)
+
+	workloadCmd.Flags().StringSlice("addrs", []string{":6379"}, "Valthree cluster address(es)")
+	workloadCmd.Flags().Duration("check-timeout", time.Hour, "model checking timeout")
+}
+
 var workloadCmd = &cobra.Command{
 	Use:   "workload",
-	Short: "Start a continuous testing workload",
-	Long:  "Start a continuous testing workload. The workload runs indefinitely, executing a random sequence of commands on a Valthree cluster and periodically verifying that the cluster has maintained strong serializable consistency.",
+	Short: "Start a continuous workload exercising a Valthree cluster",
 	Run: func(cmd *cobra.Command, args []string) {
-		logger, err := newLogger(cmd.Flags())
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
+		// The entry point for the Antithesis workload, which runs indefinitely.
+		// First, validate the user-supplied flags. Because we're optimizing for
+		// brevity, we simply crash when flags are invalid.
+		logger := orFatal(newLogger(cmd.Flags()))
+		clusterAddrs := orFatal(cmd.Flags().GetStringSlice("addrs"))
+		checkTimeout := orFatal(cmd.Flags().GetDuration("check-timeout"))
 
-		clusterAddr, err := cmd.Flags().GetString("addr")
-		if err != nil {
-			logger.Error("cluster addr flag invalid", "err", err)
-			os.Exit(1)
-		}
-		addr, err := net.ResolveTCPAddr("tcp", clusterAddr)
-		if err != nil {
-			logger.Error("resolve cluster addr failed", "cluster_addr", clusterAddr, "err", err)
-			os.Exit(1)
-		}
-		logger.Info("resolved cluster addr", "cluster_addr", addr)
+		// Before injecting faults, the Antithesis platform lets us verify that our
+		// system is up and running. We'll check the cluster by waiting for each
+		// server to respond to a PING.
+		addrs := make([]net.Addr, len(clusterAddrs))
+		for i, serverAddr := range clusterAddrs {
+			logger := logger.With("server_addr", serverAddr)
+			addr, err := net.ResolveTCPAddr("tcp", serverAddr)
+			if err != nil {
+				logger.Error("server addr misconfigured", "err", err)
+				os.Exit(1)
+			}
+			logger.Debug("resolved server addr")
 
-		// Verify that any flags we'll need later are well-formed.
-		checkTimeout, err := cmd.Flags().GetDuration("check-timeout")
-		if err != nil {
-			logger.Error("check-timeout flag invalid", "err", err)
+			pinger := dial(logger, addr) // blocks until cluster is ready
+			logger.Debug("pinged server")
+			pinger.CloseAndLog(logger)
+			addrs[i] = addr
 		}
+		// The cluster is up! Using the Antithesis SDK, we tell the platform that
+		// we're ready for fault injection.
+		logger.Info("setup complete", "cluster_addrs", addrs)
+		lifecycle.SetupComplete(map[string]any{"cluster_addrs": addrs})
 
-		pinger := dial(logger, addr) // blocks until cluster is ready
-		defer pinger.CloseAndLog(logger)
-		logger.Info("setup complete", "cluster_addr", addr)
-
+		// Until the workload gets a signal to stop, exercise the cluster. Each
+		// iteration generates a random, concurrent workload, records the results,
+		// and verifies that the cluster is strict serializable.
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-
 		for {
 			select {
 			case <-sig:
 				os.Exit(0)
 			default:
-				loadAndVerify(logger, addr, checkTimeout)
+				exerciseAndVerify(logger, addrs, checkTimeout)
 			}
 		}
 	},
 }
 
-func loadAndVerify(logger *slog.Logger, addr net.Addr, timeout time.Duration) {
-	// Generate a large, randomized workload.
-	r := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	workloads := proptest.GenWorkloads(4 /* scale */, r)
+func exerciseAndVerify(logger *slog.Logger, addrs []net.Addr, timeout time.Duration) {
+	seeds := []uint64{rand.Uint64(), rand.Uint64()}
+	logger = logger.With("pcg_seeds", seeds, "cluster_addrs", addrs)
 
-	// Run the workload and collect the results.
+	// Before running this workload, return the cluster to a known state by
+	// flushing it. This prevents an unclean shutdown from poisoning subsequent
+	// runs.
+	logger.Debug("flushing cluster")
+	client := dial(logger, addrs[0])
+	for {
+		if err := client.FlushAll(); err != nil {
+			logger.Debug("flush failed", "retry_after", time.Second, "err", err)
+			time.Sleep(time.Second)
+			continue
+		}
+		logger.Debug("flushed cluster")
+		break
+	}
+
+	// Next, generate a concurrent, randomized workload. The workload is a set of
+	// instructions, telling each client to execute a series of GET, PUT, and DEL
+	// commands on a small set of keys.
+	logger.Debug("generating new workload")
+	r := rand.New(rand.NewPCG(seeds[0], seeds[1]))
+	workloads := proptest.GenWorkloads(r)
+
+	// Run the workload, recording the timing and result of each operation. To
+	// maximize concurrent work, we block each client until all the clients are
+	// ready to begin.
+	logger.Debug("running workload")
 	var wg sync.WaitGroup
 	start := make(chan struct{})
-	for _, workload := range workloads {
+	for i, workload := range workloads {
 		wg.Go(func() {
+			addr := addrs[i%len(addrs)]
+			logger := logger.With("client_id", i, "addr", addr)
 			client := dial(logger, addr)
 			defer client.CloseAndLog(logger)
 			<-start
-			proptest.RunWorkload(client, workload)
+			proptest.RunWorkload(logger, client, workload)
 		})
 	}
 	close(start)
 	wg.Wait()
+	logger.Debug("workload complete")
 
-	// Check whether the workload results contain any consistency violations.
+	// We've run the workload and collected the results. Using the porcupine
+	// linearizability checker, verify that the operations on each key are
+	// linearizable - and therefore, that the Valthree key-value store is strong
+	// serializable. (Etcd, the strong serializable key-value store at the heart
+	// of Kubernetes, also uses porcupine to check linearizability!)
 	if err := proptest.CheckWorkloads(timeout, workloads); err != nil {
-		logger.Error("consistency check failed", "err", err)
+		// Antithesis reports may include debugging artifacts. In this case,
+		// porcupine produces an interactive visualization of the consistency bug
+		// which we'd like to surface.
 		var perr *proptest.Error
 		if errors.As(err, &perr) {
 			fname := fmt.Sprintf("consistency-failure-%s.html", perr.Key)
@@ -93,23 +138,21 @@ func loadAndVerify(logger *slog.Logger, addr net.Addr, timeout time.Duration) {
 				logger.Error("write model visualization failed", "err", err, "key", perr.Key)
 			}
 		}
+		// Using the Antithesis SDK, tell the platform that we've violated a
+		// critical system property. Unreachable is the simplest assertion, so it
+		// just takes a message and loosely-typed details.
+		//
+		// If integrating the SDK is difficult, Antithesis can also look for the
+		// presence or absence of particular log lines.
+		assert.Unreachable(
+			"Strong serializability violated", // appears as-is in Antithesis reports
+			map[string]any{"error": err.Error()},
+		)
+		logger.Error("strong serializability violated", "err", err)
 	} else {
-		logger.Info("consistency check passed")
+		logger.Info("strong serializability verified")
 	}
 
-	// Flush the cluster in preparation for the next workload.
-	logger = logger.With("cluster_addr", addr)
-	logger.Info("flushing cluster")
-	client := dial(logger, addr)
-	for {
-		if err := client.FlushAll(); err != nil {
-			logger.Debug("flush failed", "retry_after", time.Second, "err", err)
-			time.Sleep(time.Second)
-			continue
-		}
-		logger.Info("flushed cluster")
-		return
-	}
 }
 
 func dial(logger *slog.Logger, addr net.Addr) *client.Client {
@@ -117,7 +160,6 @@ func dial(logger *slog.Logger, addr net.Addr) *client.Client {
 	for {
 		c, err := client.New(addr)
 		if err != nil {
-			_ = c.Close()
 			logger.Debug("dial failed", "retry_after", time.Second, "err", err)
 			time.Sleep(time.Second)
 			continue
@@ -134,11 +176,4 @@ func dial(logger *slog.Logger, addr net.Addr) *client.Client {
 		}
 		return usable
 	}
-}
-
-func init() {
-	rootCmd.AddCommand(workloadCmd)
-
-	workloadCmd.Flags().String("addr", "valthree:6379", "Valthree cluster address")
-	workloadCmd.Flags().Duration("check-timeout", time.Hour, "model checking timeout")
 }

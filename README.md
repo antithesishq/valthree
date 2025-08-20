@@ -41,10 +41,10 @@ If you'd rather see a mission-critical distributed database tested with Antithes
 <!-- TODO: Add usage instructions -->
 
 ```
-docker compose up
+docker compose up --build
 ```
 
-## Status: unstable
+## Status: Unstable
 
 Valthree is a demonstration project.
 We don't guarantee backward compatibility, tag releases, prioritize observability, or offer any commercial support.
@@ -57,3 +57,4 @@ Offered under the [MIT License](LICENSE.md).
 [antithesis]: https://antithesis.com
 [etcd-antithesis]: https://github.com/etcd-io/etcd/tree/main/tests/antithesis
 [strong-serializable]: https://antithesis.com/resources/reliability_glossary/#strong-serializable
+[stable-go]: https://golang.org/doc/devel/release#policy

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/rand/v2"
 	"slices"
 	"time"
@@ -51,20 +52,18 @@ type rets struct {
 }
 
 // GenWorkloads generates a workload for a variable number of clients.
-func GenWorkloads(scale int, r *rand.Rand) [][]porcupine.Operation {
-	if scale <= 0 {
-		panic(fmt.Sprintf("scale must be positive: got %d", scale))
-	}
-	// To trigger consistency bugs, we want many clients using few keys.
-	keys := make([]string, r.IntN(4*scale)+1)
+func GenWorkloads(r *rand.Rand) [][]porcupine.Operation {
+	// To trigger consistency bugs, we want multiple clients to operate
+	// concurrently on a handful of keys.
+	keys := make([]string, r.IntN(3)+2) // 2-4 keys
 	for i := range keys {
 		keys[i] = fmt.Sprintf("key%d", i)
 	}
-	numClientsPerKey := r.IntN(4*scale) + 2
-	// Scale up ops/client faster than keys or clients.
-	opsPerClient := r.IntN(128*scale*scale) + 128
+	numClientsPerKey := r.IntN(3) + 2 // 2-4 clients per key
+	opsPerClient := r.IntN(128) + 128 // 128-255 operations per client
 	workloads := make([][]porcupine.Operation, len(keys)*numClientsPerKey)
-	// Bias the workload towards GET and SET.
+	// Bias the workload towards GETs, which makes checking for linearizability
+	// faster.
 	ops := []op.Op{
 		op.Get,
 		op.Get,
@@ -82,7 +81,7 @@ func GenWorkloads(scale int, r *rand.Rand) [][]porcupine.Operation {
 				Input: &args{
 					Op:    ops[r.IntN(len(ops))],
 					Key:   key,
-					Value: diceware.GenWord(r),
+					Value: diceware.GenString(r),
 				},
 				Output: &rets{},
 			}
@@ -93,8 +92,11 @@ func GenWorkloads(scale int, r *rand.Rand) [][]porcupine.Operation {
 }
 
 // RunWorkload runs a workload on a client.
-func RunWorkload(client *client.Client, workload []porcupine.Operation) {
+func RunWorkload(logger *slog.Logger, client *client.Client, workload []porcupine.Operation) {
 	for i := range workload {
+		if i%100 == 0 {
+			logger.Debug("running workload", "ops_complete", i, "ops_left", len(workload)-i)
+		}
 		in := workload[i].Input.(*args)
 		out := workload[i].Output.(*rets)
 		workload[i].Call = time.Now().UnixNano()

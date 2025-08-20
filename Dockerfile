@@ -9,7 +9,7 @@ RUN go mod download
 COPY *.go /workspace/
 COPY internal /workspace/internal
 
-RUN CGO_ENABLED=0 go build -trimpath -buildvcs=false -o /go/bin/valthree .
+RUN go build -race -trimpath -buildvcs=false -o /go/bin/valthree .
 
 FROM docker.io/library/debian:bookworm-slim
 LABEL maintainer="Antithesis <support@antithesis.com>"
@@ -18,4 +18,4 @@ RUN apt update && apt install -y --no-install-recommends redis-tools && rm -rf /
 
 COPY --from=builder /go/bin/valthree /usr/local/bin/valthree
 
-ENTRYPOINT ["/usr/local/bin/valthree"]
+ENTRYPOINT ["/usr/local/bin/valthree", "serve", "--json"]

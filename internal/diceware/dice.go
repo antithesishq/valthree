@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// GenWord generates a short string.
-func GenWord(r *rand.Rand) string {
+// GenString generates a short string.
+func GenString(r *rand.Rand) string {
 	var sb strings.Builder
 	for i := range 3 {
 		if i > 0 {
