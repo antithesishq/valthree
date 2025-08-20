@@ -41,4 +41,5 @@ upgrade: ## Upgrade dependencies
 .PHONY: run
 run: ## Build containers and run Docker Compose
 	docker build -f Dockerfile.valthree -t valthree:latest .
+	docker build -f Dockerfile.config -t valthree-config:latest .
 	docker compose up
