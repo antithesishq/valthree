@@ -38,7 +38,7 @@ jobs:
         with:
           registry: us-central1-docker.pkg.dev
           username: _json_key
-          password: {{ secrets.ANTITHESIS_GAR_KEY }}
+          password: ${{ secrets.ANTITHESIS_GAR_KEY }}
       - name: Extract Metadata
         id: extract-metadata
         uses: docker/metadata-action@v5
@@ -56,8 +56,8 @@ jobs:
           context: .
           file: Dockerfile.config
           push: true
-          tags: {{ steps.extract-metadata.outputs.tags }}
-          labels: {{ steps.extract-metadata.outputs.labels }}
+          tags: ${{ steps.extract-metadata.outputs.tags }}
+          labels: ${{ steps.extract-metadata.outputs.labels }}
       - name: Build Valthree
         id: build-valthree
         uses: docker/build-push-action@v5
@@ -65,8 +65,8 @@ jobs:
           context: .
           file: Dockerfile.valthree
           push: true
-          tags: {{ steps.extract-metadata.outputs.tags }}
-          labels: {{ steps.extract-metadata.outputs.labels }}
+          tags: ${{ steps.extract-metadata.outputs.tags }}
+          labels: ${{ steps.extract-metadata.outputs.labels }}
 
   Antithesis:
     name: Antithesis
@@ -84,7 +84,6 @@ jobs:
           config_image: valthree-config@${{ steps.build-config.outputs.digest }}
           images: us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree@${{ steps.build-valthree.outputs.digest }};docker.io/minio/minio:RELEASE.2025-07-23T15-54-02Z
           description: "CI for ${{ github.ref_name }} (commit ${{ github.sha }})"
-          test_name:  ${{ inputs.test }}
           additional_parameters: |-
             custom.repo_name=${{ github.repository }}
             custom.action_name = ${{ github.action }}
