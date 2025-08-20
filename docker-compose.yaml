@@ -8,8 +8,6 @@ services:
       - "serve"
       - "-v"
       - "--json"
-    pull_policy: missing
-    build: .
     init: true
     depends_on: [minio]
     healthcheck:
@@ -23,8 +21,6 @@ services:
       - "serve"
       - "-v"
       - "--json"
-    pull_policy: missing
-    build: .
     init: true
     depends_on: [minio]
     healthcheck:
@@ -38,8 +34,6 @@ services:
       - "serve"
       - "-v"
       - "--json"
-    pull_policy: missing
-    build: .
     init: true
     depends_on: [minio]
     healthcheck:

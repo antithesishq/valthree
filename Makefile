@@ -37,3 +37,8 @@ lintfix: ## Automatically fix some lint errors
 .PHONY: upgrade
 upgrade: ## Upgrade dependencies
 	go get -u -t ./... && go mod tidy -v
+
+.PHONY: run
+run: ## Build containers and run Docker Compose
+	docker build -f Dockerfile.valthree -t valthree:latest .
+	docker compose up

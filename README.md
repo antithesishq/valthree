@@ -41,7 +41,7 @@ If you'd rather see a mission-critical distributed database tested with Antithes
 <!-- TODO: Add usage instructions -->
 
 ```
-docker compose up --build
+make run
 ```
 
 ## Status: Unstable
