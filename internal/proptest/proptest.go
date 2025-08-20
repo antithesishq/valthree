@@ -192,7 +192,7 @@ func newModel() porcupine.Model {
 				// Delete definitely succeeded, so the key must be missing.
 				return true, set.New()
 			default:
-				panic(fmt.Sprintf("describe unknown op %s", in.Op))
+				panic(fmt.Sprintf("step unknown op %s", in.Op))
 			}
 		},
 		DescribeOperation: func(input, output any) string {
