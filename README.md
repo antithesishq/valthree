@@ -27,8 +27,8 @@ To preserve consistency, clusters use conditional writes and optimistic concurre
 - `FLUSHALL` deletes the database file.
 
 This is terrible for performance &mdash; writes to the whole database are serialized! &mdash; but it's simple.
+The whole implementation is in [`internal/server`](./internal/server).
 Keeping the implementation simple lets us focus on testing.
-The server implementation is in `internal/server/server.go` and `internal/server/storage.go`.
 
 ```
 
