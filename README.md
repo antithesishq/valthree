@@ -46,7 +46,7 @@ Keeping the implementation simple lets us focus on testing.
 
 ### Traditional testing
 
-Valthree has only one traditional, example-based unit test: `TestExample` in `main_test.go`.
+Valthree has only one traditional, example-based unit test: `TestExample` in [`main_test.go`](./main_test.go).
 It's straightforward, but limited.
 There's just one client, so it doesn't test our optimistic concurrency control.
 It certainly doesn't test how Valthree behaves in fault-prone production environments.
