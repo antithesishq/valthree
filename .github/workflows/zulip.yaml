@@ -1,10 +1,10 @@
-name: Zulip Notification Bot
+name: Zulip
 on:
   push:
 permissions:
   contents: read
 jobs:
-  Zulip:
+  Notify:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
