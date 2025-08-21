@@ -1,4 +1,9 @@
-package diceware
+package proptest
+
+import (
+	"math/rand/v2"
+	"strings"
+)
 
 // A corpus of three-letter English words drawn from childrens' reading
 // resources (so there's no profanity).
@@ -173,4 +178,15 @@ var corpus = []string{
 	"yet",
 	"you",
 	"zip",
+}
+
+func genString(r *rand.Rand) string {
+	var sb strings.Builder
+	for i := range 3 {
+		if i > 0 {
+			sb.WriteRune('-')
+		}
+		sb.WriteString(corpus[r.IntN(len(corpus))])
+	}
+	return sb.String()
 }

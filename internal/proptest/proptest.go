@@ -13,9 +13,7 @@ import (
 
 	"github.com/anishathalye/porcupine"
 	"github.com/antithesishq/valthree/internal/client"
-	"github.com/antithesishq/valthree/internal/diceware"
 	"github.com/antithesishq/valthree/internal/op"
-	"github.com/antithesishq/valthree/internal/set"
 )
 
 // Error is sometimes returned from CheckWorkloads, indicating that
@@ -81,7 +79,7 @@ func GenWorkloads(r *rand.Rand) [][]porcupine.Operation {
 				Input: &args{
 					Op:    ops[r.IntN(len(ops))],
 					Key:   key,
-					Value: diceware.GenString(r),
+					Value: genString(r),
 				},
 				Output: &rets{},
 			}
@@ -161,11 +159,11 @@ func CheckWorkloads(deadline time.Duration, workloads [][]porcupine.Operation) (
 
 func newModel() porcupine.Model {
 	return porcupine.Model{
-		Init: func() any { return set.New() },
+		Init: func() any { return newSet() },
 		Step: func(state, input, output any) (bool, any) {
 			in := input.(*args)
 			out := output.(*rets)
-			db := state.(*set.Set)
+			db := state.(*set)
 			switch in.Op {
 			case op.Get:
 				if out.Err != nil {
@@ -187,7 +185,7 @@ func newModel() porcupine.Model {
 					return true, db.With(in.Value)
 				}
 				// Write definitely succeeded, so there's only one valid value.
-				return true, set.New(in.Value)
+				return true, newSet(in.Value)
 			case op.Del:
 				if out.Value != "" {
 					panic(fmt.Sprintf("value returned for DEL %s", in.Key))
@@ -198,7 +196,7 @@ func newModel() porcupine.Model {
 					return true, db.With("")
 				}
 				// Delete definitely succeeded, so the key must be missing.
-				return true, set.New()
+				return true, newSet()
 			default:
 				panic(fmt.Sprintf("step unknown op %s", in.Op))
 			}
@@ -210,8 +208,8 @@ func newModel() porcupine.Model {
 			if left == nil || right == nil {
 				return left == right
 			}
-			l := left.(*set.Set)
-			r := right.(*set.Set)
+			l := left.(*set)
+			r := right.(*set)
 			return slices.Equal(l.Items(), r.Items())
 		},
 	}
