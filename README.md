@@ -16,7 +16,7 @@ Please don't rely on Valthree in production!
 For more on Valthree's design, testing strategy, and Antithesis integration, read on.
 If you'd rather see a mission-critical distributed database tested with Antithesis, head over to [etcd][etcd-antithesis].
 
-## :pencil: Design
+## :triangular_ruler: Design
 
 Valthree clusters persist the whole key-value database as a single JSON file in object storage.
 To preserve consistency, clusters use conditional writes and optimistic concurrency control:
