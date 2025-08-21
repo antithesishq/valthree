@@ -7,16 +7,16 @@ Clusters offer [strong serializable consistency][strong-serializable] and only a
 Applications connect to a Valthree cluster using any Valkey or Redis client library.
 Clusters support the `GET`, `SET`, `DEL`, `FLUSHALL`, `PING`, and `QUIT` commands.
 
-## Motivation
+## :bulb: Motivation
 
-We built Valthree to show off [Antithesis][antithesis], our platform for testing distributed systems.
+**We built Valthree to show off [Antithesis][antithesis], our platform for testing distributed systems.**
 So rather than maximizing performance, minimizing operating costs, or implementing a lot of features, we've intentionally kept this project simple: it's real enough to have bugs, but small enough to understand quickly.
 Please don't rely on Valthree in production!
 
 For more on Valthree's design, testing strategy, and Antithesis integration, read on.
 If you'd rather see a mission-critical distributed database tested with Antithesis, head over to [etcd][etcd-antithesis].
 
-## Design
+## :pencil: Design
 
 Valthree clusters persist the whole key-value database as a single JSON file in object storage.
 To preserve consistency, clusters use conditional writes and optimistic concurrency control:
@@ -42,7 +42,7 @@ The server implementation is in `internal/server/server.go` and `internal/server
 
 ```
 
-## Testing
+## :white_check_mark: Testing
 
 ### Traditional testing
 
@@ -54,7 +54,7 @@ It certainly doesn't test how Valthree behaves in fault-prone production environ
 <!-- TODO: continue, working up to property-based testing and Antithesis -->
 
 
-## Legal
+## :hearts: Legal
 
 Offered under the [MIT License](LICENSE.md).
 
