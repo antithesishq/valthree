@@ -75,7 +75,7 @@ jobs:
           username: ${{ secrets.ANTITHESIS_USERNAME }}
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GH_PAT }}
-          config_image: valthree-config@${{ steps.build-config.outputs.digest }}
+          config_image: us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree-config@${{ steps.build-config.outputs.digest }}
           images: us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree@${{ steps.build-valthree.outputs.digest }};docker.io/minio/minio:RELEASE.2025-07-23T15-54-02Z
           description: "CI for ${{ github.ref_name }} (commit ${{ github.sha }})"
           additional_parameters: |-
