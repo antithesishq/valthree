@@ -90,7 +90,7 @@ func TestStrongSerializable(t *testing.T) {
 	if deadline, ok := t.Context().Deadline(); ok {
 		timeout = time.Until(deadline)
 	}
-	err := proptest.CheckWorkloads(timeout, workloads)
+	_, err := proptest.CheckWorkloads(timeout, workloads)
 	if attest.Ok(t, err, attest.Sprintf("strong serializability violated")) {
 		return
 	}

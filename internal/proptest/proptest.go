@@ -115,23 +115,31 @@ func RunWorkload(logger *slog.Logger, client *client.Client, workload []porcupin
 }
 
 // CheckWorkloads verifies that the real-world behavior of the Valthree server,
-// as seen by RunWorkload, satisfies strong serializable consistency.
+// as seen by RunWorkload, satisfies strong serializable consistency. When no
+// consistency anomalies are found, CheckWorkloads also returns the percentage
+// of operations that succeeded (as a measure of liveness).
 //
 // Verification is NP-hard, so it may time out. If verification fails or times
 // out, the returned error will be an *Error.
-func CheckWorkloads(deadline time.Duration, workloads [][]porcupine.Operation) error {
+func CheckWorkloads(deadline time.Duration, workloads [][]porcupine.Operation) (float64, error) {
 	// Valthree keys are linearizable. If we've broken something, it's painful to
 	// debug the whole workload. Instead, partition the execution history by key
 	// and check each partition individually. (Porcupine supports this via
 	// Model.Partition, but we have to do it ourselves if we also want to
 	// restrict the visualization to a single key.)
 	partitioned := make(map[string][]porcupine.Operation)
+	var successes, total float64
 	for _, history := range workloads {
 		for _, op := range history {
+			total++
+			if op.Output.(*rets).Err == nil {
+				successes++
+			}
 			in := op.Input.(*args)
 			partitioned[in.Key] = append(partitioned[in.Key], op)
 		}
 	}
+	progress := successes / total
 
 	for key, history := range partitioned {
 		model := newModel()
@@ -140,15 +148,15 @@ func CheckWorkloads(deadline time.Duration, workloads [][]porcupine.Operation) e
 			continue
 		}
 		if cr == porcupine.Unknown {
-			return &Error{Key: key, TimedOut: true}
+			return 0, &Error{Key: key, TimedOut: true}
 		}
 		var buf bytes.Buffer
 		if err := porcupine.Visualize(model, info, &buf); err != nil {
-			return err
+			return 0, err
 		}
-		return &Error{Key: key, Visualization: &buf}
+		return 0, &Error{Key: key, Visualization: &buf}
 	}
-	return nil
+	return progress, nil
 }
 
 func newModel() porcupine.Model {

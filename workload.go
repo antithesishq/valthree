@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -127,7 +128,8 @@ func exerciseAndVerify(logger *slog.Logger, addrs []net.Addr, timeout time.Durat
 	// linearizable - and therefore, that the Valthree key-value store is strong
 	// serializable. (Etcd, the strong serializable key-value store at the heart
 	// of Kubernetes, also uses porcupine to check linearizability!)
-	if err := proptest.CheckWorkloads(timeout, workloads); err != nil {
+	progress, err := proptest.CheckWorkloads(timeout, workloads)
+	if err != nil {
 		// Antithesis reports may include debugging artifacts. In this case,
 		// porcupine produces an interactive visualization of the consistency bug
 		// which we'd like to surface.
@@ -150,7 +152,8 @@ func exerciseAndVerify(logger *slog.Logger, addrs []net.Addr, timeout time.Durat
 		)
 		logger.Error("strong serializability violated", "err", err)
 	} else {
-		logger.Info("strong serializability verified")
+		percent := strconv.FormatFloat(100*progress, 'f', 1 /* precision */, 64 /* bitsize */)
+		logger.Info("strong serializability verified", "percent_success", percent)
 	}
 
 }
