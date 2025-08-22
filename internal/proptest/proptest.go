@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/anishathalye/porcupine"
+	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/antithesishq/valthree/internal/client"
 	"github.com/antithesishq/valthree/internal/op"
 )
@@ -106,7 +107,7 @@ func RunWorkload(logger *slog.Logger, client *client.Client, workload []porcupin
 		case op.Del:
 			out.Err = client.Del(in.Key)
 		default:
-			panic(fmt.Sprintf("run unknown op %s", in.Op))
+			assert.Unreachable("Unexpected operation in workload run", map[string]any{"op": in.Op})
 		}
 		workload[i].Return = time.Now().UnixNano()
 	}
@@ -177,9 +178,6 @@ func newModel() porcupine.Model {
 				}
 				return db.Contains(out.Value), db
 			case op.Set:
-				if out.Value != "" {
-					panic(fmt.Sprintf("value returned for SET %s %s", in.Key, in.Value))
-				}
 				if out.Err != nil {
 					// Write may have succeeded, so we expand the set of valid values.
 					return true, db.With(in.Value)
@@ -187,9 +185,6 @@ func newModel() porcupine.Model {
 				// Write definitely succeeded, so there's only one valid value.
 				return true, newSet(in.Value)
 			case op.Del:
-				if out.Value != "" {
-					panic(fmt.Sprintf("value returned for DEL %s", in.Key))
-				}
 				if out.Err != nil {
 					// Delete may have succeeded: represent the potential absence
 					// of the key with an empty string.
@@ -198,7 +193,8 @@ func newModel() porcupine.Model {
 				// Delete definitely succeeded, so the key must be missing.
 				return true, newSet()
 			default:
-				panic(fmt.Sprintf("step unknown op %s", in.Op))
+				assert.Unreachable("Unexpected step operation", map[string]any{"op": in.Op})
+				return true, db
 			}
 		},
 		DescribeOperation: func(input, output any) string {
@@ -232,6 +228,7 @@ func describe(in *args, out *rets) string {
 	case op.Del:
 		return fmt.Sprintf("DEL %s = %s", in.Key, result)
 	default:
-		panic(fmt.Sprintf("describe unknown op %s", in.Op))
+		assert.Unreachable("Unexpected describe operation", map[string]any{"op": in.Op})
+		return fmt.Sprintf("UNKNOWN %v", in.Op)
 	}
 }

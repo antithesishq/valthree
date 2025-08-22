@@ -4,6 +4,8 @@ import (
 	"errors"
 	"math/rand/v2"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +15,8 @@ import (
 	"github.com/antithesishq/valthree/internal/servertest"
 	"go.akshayshah.org/attest"
 )
+
+const EnvSeeds = "SEEDS"
 
 func TestExample(t *testing.T) {
 	// This is a simple integration test: it doesn't use property-based testing
@@ -52,7 +56,22 @@ func TestStrongSerializable(t *testing.T) {
 	// testing helpers lets developers iterate quickly on their workstations,
 	// gaining confidence before kicking off a longer test on the Antithesis
 	// platform.
-	r := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+	seed0, seed1 := rand.Uint64(), rand.Uint64()
+	// Optionally, let developers manually specify our PRNG seeds. This improves
+	// reproducibility when debugging, but concurrent Go code
+	// nondeterministic unless it's running on the Antithesis platform.
+	if seeds := os.Getenv(EnvSeeds); seeds != "" {
+		opts := attest.Sprintf("$SEEDS must be a comma-separated pair of uint64, got %q", seeds)
+		first, second, ok := strings.Cut(seeds, ",")
+		attest.True(t, ok, opts)
+		var err error
+		seed0, err = strconv.ParseUint(first, 10 /* base */, 64 /* bitsize */)
+		attest.Ok(t, err, opts)
+		seed1, err = strconv.ParseUint(second, 10 /* base */, 64 /* bitsize */)
+		attest.Ok(t, err, opts)
+	}
+	t.Logf("seeded with %v,%v", seed0, seed1)
+	r := rand.New(rand.NewPCG(seed0, seed1))
 
 	// First, we generate a random, concurrent workload. The workload is a set of
 	// instructions telling each client to perform a series of GET, PUT, and DEL
