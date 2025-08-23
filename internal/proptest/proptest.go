@@ -168,15 +168,25 @@ func newModel() porcupine.Model {
 			switch in.Op {
 			case op.Get:
 				if out.Err != nil {
-					if errors.Is(out.Err, client.ErrNotFound) {
-						// Missing keys may be represented by an empty set or a set
-						// containing the empty string.
-						return db.Contains("") || db.Len() == 0, db
+					if !errors.Is(out.Err, client.ErrNotFound) {
+						// Other failures don't affect the set of valid values.
+						return true, db
 					}
-					// Other failures are always okay
-					return true, db
+					// Missing keys may be represented by an empty set or a set
+					// containing the empty string.
+					if db.Contains("") || db.Len() == 0 {
+						// We now know that the key is definitely missing.
+						return true, newSet()
+					}
+					// Server returned ErrNotFound, but the key was definitely present.
+					return false, db
 				}
-				return db.Contains(out.Value), db
+				if db.Contains(out.Value) {
+					// We now know the key's value.
+					return true, newSet(out.Value)
+				}
+				// Server returned an invalid value.
+				return false, db
 			case op.Set:
 				if out.Err != nil {
 					// Write may have succeeded, so we expand the set of valid values.

@@ -45,7 +45,7 @@ services:
     entrypoint:
       - "/usr/local/bin/valthree"
       - "workload"
-      # - "-v"
+      - "-v"
       - "--json"
       - "--addrs"
       - "valthree0:6379,valthree1:6379,valthree2:6379"
