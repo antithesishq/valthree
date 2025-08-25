@@ -151,7 +151,7 @@ func exerciseAndVerify(logger *slog.Logger, addrs []net.Addr, timeout time.Durat
 		// If integrating the SDK is difficult, Antithesis can also look for the
 		// presence or absence of particular log lines.
 		assert.Unreachable(
-			"Database is strong serializable", // appears as-is in Antithesis reports
+			"Database is strong serializable - should be resolved", // appears as-is in Antithesis reports
 			map[string]any{"error": err.Error()},
 		)
 		logger.Error("strong serializability violated", "err", err)
