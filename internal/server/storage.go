@@ -101,14 +101,14 @@ func (s *storage) getDB() (map[string]string, string, error) {
 	if res.ETag == nil || *res.ETag == "" {
 		// With our client configuration, we believe that this branch is
 		// unreachable. If Antithesis can force us into this branch, fail the run.
-		assert.Unreachable("Database has no ETag", nil)
+		assert.Unreachable("Database always has an ETag", nil)
 		return nil, "", errors.New("response has no etag")
 	}
 	items := make(map[string]string)
 	if err := json.NewDecoder(res.Body).Decode(&items); err != nil {
 		// If we reach this branch, the write path is broken - we should never have
 		// invalid JSON in object storage.
-		assert.Unreachable("Database in object storage is invalid JSON", nil)
+		assert.Unreachable("Database in object storage is always valid JSON", nil)
 		return nil, "", fmt.Errorf("unmarshal: %v", err)
 	}
 	return items, *res.ETag, nil
@@ -122,7 +122,7 @@ func (s *storage) setDB(items map[string]string, etag string) error {
 	if err != nil {
 		// Our tests and workloads only send valid UTF-8, so this should be
 		// unreachable.
-		assert.Unreachable("Database in memory is invalid JSON", nil)
+		assert.Unreachable("Database in memory is always valid JSON", nil)
 		return fmt.Errorf("marshal JSON: %v", err)
 	}
 

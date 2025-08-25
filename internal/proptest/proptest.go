@@ -107,7 +107,7 @@ func RunWorkload(logger *slog.Logger, client *client.Client, workload []porcupin
 		case op.Del:
 			out.Err = client.Del(in.Key)
 		default:
-			assert.Unreachable("Unexpected operation in workload run", map[string]any{"op": in.Op})
+			assert.Unreachable("Workload ran only GET/SET/DEL", map[string]any{"op": in.Op})
 		}
 		workload[i].Return = time.Now().UnixNano()
 	}
@@ -203,7 +203,7 @@ func newModel() porcupine.Model {
 				// Delete definitely succeeded, so the key must be missing.
 				return true, newSet()
 			default:
-				assert.Unreachable("Unexpected step operation", map[string]any{"op": in.Op})
+				assert.Unreachable("Model step only handled GET/SET/DEL", map[string]any{"op": in.Op})
 				return true, db
 			}
 		},
@@ -238,7 +238,7 @@ func describe(in *args, out *rets) string {
 	case op.Del:
 		return fmt.Sprintf("DEL %s = %s", in.Key, result)
 	default:
-		assert.Unreachable("Unexpected describe operation", map[string]any{"op": in.Op})
+		assert.Unreachable("Model only described GET/SET/DEL", map[string]any{"op": in.Op})
 		return fmt.Sprintf("UNKNOWN %v", in.Op)
 	}
 }
