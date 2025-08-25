@@ -1,4 +1,21 @@
 services:
+  workload:
+    container_name: workload
+    hostname: workload
+    image: valthree:latest
+    entrypoint:
+      - "/usr/local/bin/valthree"
+      - "workload"
+      - "-v"
+      - "--json"
+      - "--addrs"
+      - "valthree0:6379,valthree1:6379,valthree2:6379"
+      - "--artifacts"
+      - "/var/log/valthree/workload"
+    depends_on: [valthree0, valthree1, valthree2]
+    init: true
+    volumes:
+      - workload_logs:/var/log/valthree/workload
   valthree0:
     container_name: valthree0
     hostname: valthree0
@@ -38,19 +55,6 @@ services:
     depends_on: [minio]
     healthcheck:
       test: redis-cli PING
-  workload:
-    container_name: workload
-    hostname: workload
-    image: valthree:latest
-    entrypoint:
-      - "/usr/local/bin/valthree"
-      - "workload"
-      - "-v"
-      - "--json"
-      - "--addrs"
-      - "valthree0:6379,valthree1:6379,valthree2:6379"
-    depends_on: [valthree0, valthree1, valthree2]
-    init: true
   minio:
     container_name: minio
     hostname: minio
@@ -71,3 +75,4 @@ services:
 
 volumes:
   minio_data:
+  workload_logs:

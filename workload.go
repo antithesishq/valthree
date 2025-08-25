@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"syscall"
@@ -25,6 +26,7 @@ func init() {
 
 	workloadCmd.Flags().StringSlice("addrs", []string{":6379"}, "Valthree cluster address(es)")
 	workloadCmd.Flags().Duration("check-timeout", time.Hour, "model checking timeout")
+	workloadCmd.Flags().String("artifacts", ".", "directory for storing debugging artifacts")
 }
 
 var workloadCmd = &cobra.Command{
@@ -37,6 +39,7 @@ var workloadCmd = &cobra.Command{
 		logger := orFatal(newLogger(cmd.Flags()))
 		clusterAddrs := orFatal(cmd.Flags().GetStringSlice("addrs"))
 		checkTimeout := orFatal(cmd.Flags().GetDuration("check-timeout"))
+		artifactDir := orFatal(cmd.Flags().GetString("artifacts"))
 
 		// Before injecting faults, the Antithesis platform lets us verify that our
 		// system is up and running. We'll check the cluster by waiting for each
@@ -71,13 +74,13 @@ var workloadCmd = &cobra.Command{
 			case <-sig:
 				os.Exit(0)
 			default:
-				exerciseAndVerify(logger, addrs, checkTimeout)
+				exerciseAndVerify(logger, addrs, checkTimeout, artifactDir)
 			}
 		}
 	},
 }
 
-func exerciseAndVerify(logger *slog.Logger, addrs []net.Addr, timeout time.Duration) {
+func exerciseAndVerify(logger *slog.Logger, addrs []net.Addr, timeout time.Duration, artifactDir string) {
 	seeds := []uint64{rand.Uint64(), rand.Uint64()}
 	logger = logger.With("pcg_seeds", seeds, "cluster_addrs", addrs)
 
@@ -136,7 +139,8 @@ func exerciseAndVerify(logger *slog.Logger, addrs []net.Addr, timeout time.Durat
 		var perr *proptest.Error
 		if errors.As(err, &perr) {
 			fname := fmt.Sprintf("consistency-failure-%s.html", perr.Key)
-			if err := os.WriteFile(fname, perr.Visualization.Bytes(), 0644); err != nil {
+			fpath := filepath.Join(artifactDir, fname)
+			if err := os.WriteFile(fpath, perr.Visualization.Bytes(), 0644); err != nil {
 				logger.Error("write model visualization failed", "err", err, "key", perr.Key)
 			}
 		}
