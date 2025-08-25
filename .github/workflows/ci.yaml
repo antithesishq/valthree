@@ -6,7 +6,16 @@ on:
     branches: [main]
   schedule:
     - cron: "15 22 * * *"
-  workflow_dispatch: {} # support manual runs
+  workflow_dispatch:
+    inputs:
+      duration:
+        type: string
+        required: true # default set below b/c automated runs don't use this config
+        description: Test duration (in minutes)
+      emails:
+        type: string
+        required: true
+        description: Email recipients
 permissions:
   contents: read
 jobs:
@@ -83,11 +92,7 @@ jobs:
           github_token: ${{ secrets.GH_PAT }}
           config_image: us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree-config@${{ steps.build-config.outputs.digest }}
           images: us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree@${{ steps.build-valthree.outputs.digest }};docker.io/minio/minio:RELEASE.2025-07-23T15-54-02Z
-          description: "CI for ${{ github.ref_name }} (commit ${{ github.sha }})"
+          description: "[${{ github.repository }}] CI for ${{ github.ref_name }} (commit ${{ github.sha }})"
+          email_recipients: ${{ github.event.inputs.emails }}
           additional_parameters: |-
-            antithesis.duration=30
-
-# TODO: potentially useful custom parameters
-# custom.repo_name=${{ github.repository }}
-# custom.action_name = ${{ github.action }}
-# custom.actor = ${{ github.actor }}
+            antithesis.duration=${{ github.event.inputs.duration || "30" }}
