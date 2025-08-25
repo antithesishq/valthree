@@ -22,12 +22,12 @@ Clusters support the `GET`, `SET`, `DEL`, `FLUSHALL`, `PING`, and `QUIT` command
 Valthree clusters persist the whole key-value database as a *single* JSON file in object storage.
 To preserve consistency, clusters use optimistic concurrency control:
 
-- To handle `SET`s and `DEL`s, servers read the database file from object storage, modify it, and write it back with the `If-Match` header.
+- To handle `SET` and `DEL` commands, servers read the database file from object storage, modify it, and write it back with the `If-Match` header.
   If another process has modified the database during the read-modify-write cycle, the database's ETag changes, the write fails, and the client receives an error.
-- `GET`s are served directly from object storage, without any caching.
-- `FLUSHALL` deletes the database file.
+- To handle `GET` commands, servers read the database file from object storage (without any caching).
+- To handle `FLUSHALL` commands, servers delete the database file.
 
-This is terrible for performance &mdash; all writes conflict! &mdash; but it's simple enough to implement in [just two files](./internal/server).
+This is terrible for performance &mdash; all writes conflict with each other! &mdash; but it's simple enough to implement in [just two files](./internal/server).
 Keeping the implementation small lets us focus on testing.
 
 ```
