@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/anishathalye/porcupine"
-	"github.com/antithesishq/antithesis-sdk-go/assert"
 	"github.com/antithesishq/valthree/internal/client"
 	"github.com/antithesishq/valthree/internal/op"
 )
@@ -107,7 +106,7 @@ func RunWorkload(logger *slog.Logger, client *client.Client, workload []porcupin
 		case op.Del:
 			out.Err = client.Del(in.Key)
 		default:
-			assert.Unreachable("Workload ran only GET/SET/DEL", map[string]any{"op": in.Op})
+			panic(fmt.Sprintf("run workload: unexpected operation %v", in.Op))
 		}
 		workload[i].Return = time.Now().UnixNano()
 	}
@@ -203,8 +202,7 @@ func newModel() porcupine.Model {
 				// Delete definitely succeeded, so the key must be missing.
 				return true, newSet()
 			default:
-				assert.Unreachable("Model step only handled GET/SET/DEL", map[string]any{"op": in.Op})
-				return true, db
+				panic(fmt.Sprintf("step model: unexpected operation %v", in.Op))
 			}
 		},
 		DescribeOperation: func(input, output any) string {
@@ -238,7 +236,6 @@ func describe(in *args, out *rets) string {
 	case op.Del:
 		return fmt.Sprintf("DEL %s = %s", in.Key, result)
 	default:
-		assert.Unreachable("Model only described GET/SET/DEL", map[string]any{"op": in.Op})
-		return fmt.Sprintf("UNKNOWN %v", in.Op)
+		panic(fmt.Sprintf("describe: unexpected operation %v", in.Op))
 	}
 }
