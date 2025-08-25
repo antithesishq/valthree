@@ -29,6 +29,7 @@ lint: ## Lint Go
 	test -z "$$(go run cmd/gofmt -s -l . | tee /dev/stderr)"
 	go vet ./...
 	go tool staticcheck ./...
+	test $$(git grep -o 'minio/minio\:[A-Za-z0-9.-]*' | cut -d: -f 3 | sort -u | wc -l) -eq 1 || (echo "Mismatched MinIO container versions" && exit 1)
 
 .PHONY: lintfix
 lintfix: ## Automatically fix some lint errors
