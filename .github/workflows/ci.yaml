@@ -15,7 +15,7 @@ on:
       emails:
         type: string
         required: true
-        description: Email recipients
+        description: Email recipients (empty for Zulip)
 permissions:
   contents: read
 jobs:
@@ -93,6 +93,6 @@ jobs:
           config_image: us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree-config@${{ steps.build-config.outputs.digest }}
           images: us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree@${{ steps.build-valthree.outputs.digest }};docker.io/minio/minio:RELEASE.2025-07-23T15-54-02Z
           description: "[${{ github.repository }}] CI for ${{ github.ref_name }} (commit ${{ github.sha }})"
-          email_recipients: ${{ github.event.inputs.emails }}
+          email_recipients: ${{ github.event.inputs.emails || secrets.ZULIP_REPORT_EMAIL }}
           additional_parameters: |-
             antithesis.duration=${{ github.event.inputs.duration || '30' }}
