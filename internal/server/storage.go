@@ -50,12 +50,20 @@ func (s *storage) MutateDB(f func(map[string]string) (int, error)) (int, error) 
 			return 0, err
 		}
 
-		n, err := f(items)
+		// Create a copy of the items map to avoid mutating the original
+		// This ensures that if we need to retry due to ETag mismatch,
+		// we start with fresh data from the database
+		itemsCopy := make(map[string]string, len(items))
+		for k, v := range items {
+			itemsCopy[k] = v
+		}
+
+		n, err := f(itemsCopy)
 		if err != nil {
 			return 0, err
 		}
 
-		err = s.setDB(items, etag)
+		err = s.setDB(itemsCopy, etag)
 		if err != nil && !errors.Is(err, errMismatchedETag) {
 			return 0, err
 		} else if err == nil {
