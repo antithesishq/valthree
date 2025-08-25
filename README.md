@@ -71,7 +71,7 @@ Porcupine checks the clients' observations against this model.
 This is computationally difficult (it's NP-hard!), but porcupine uses some [fancy tricks][p-compositionality] to make checking as fast as possible.
 
 The machinery for this style of testing is in [`internal/proptest`](./internal/proptest/).
-The three key pieces &mdash; workload generation, workload execution, and model checking &mdash are implemented as `GenWorkloads`, `RunWorkload`, and `CheckWorkloads`.
+The three key pieces &mdash; workload generation, workload execution, and model checking &mdash; are implemented as `GenWorkloads`, `RunWorkload`, and `CheckWorkloads`.
 No matter what sort of distributed system you're testing, this generate-execute-check pattern is applicable.
 Systems with strong invariants lend themselves to simpler checkers.
 For example, in any double-entry ledger, credits and debits must always be balanced.
