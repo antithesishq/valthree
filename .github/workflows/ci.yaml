@@ -10,12 +10,12 @@ on:
     inputs:
       duration:
         type: string
-        required: true # default set below b/c automated runs don't use this config
-        description: Test duration (in minutes)
+        required: false # default set below b/c automated runs don't use this config
+        description: Test duration (minutes, default 30)
       emails:
         type: string
-        required: true
-        description: Email recipients (empty for Zulip)
+        required: false # likewise, default set below
+        description: Email recipients (default notifies Zulip)
 permissions:
   contents: read
 jobs:
