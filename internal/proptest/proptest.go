@@ -189,6 +189,9 @@ func newModel() porcupine.Model {
 			case op.Set:
 				if out.Err != nil {
 					// Write may have succeeded, so we expand the set of valid values.
+					if db.Len() == 0 {
+						return true, db.With("", in.Value)
+					}
 					return true, db.With(in.Value)
 				}
 				// Write definitely succeeded, so there's only one valid value.
