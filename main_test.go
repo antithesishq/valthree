@@ -28,8 +28,18 @@ func TestExample(t *testing.T) {
 	_, err := c.Get("foo")
 	attest.ErrorIs(t, err, client.ErrNotFound)
 
+	// COUNT == 0 (empty database)
+	count, err := c.Count()
+	attest.Ok(t, err)
+	attest.Equal(t, count, int64(0))
+
 	// SET foo bar == OK
 	attest.Ok(t, c.Set("foo", "bar"))
+
+	// COUNT == 1 (one key)
+	count, err = c.Count()
+	attest.Ok(t, err)
+	attest.Equal(t, count, int64(1))
 
 	// GET foo == bar
 	val, err := c.Get("foo")
@@ -38,6 +48,11 @@ func TestExample(t *testing.T) {
 
 	// DEL foo == OK
 	attest.Ok(t, c.Del("foo"))
+
+	// COUNT == 0 (empty database again)
+	count, err = c.Count()
+	attest.Ok(t, err)
+	attest.Equal(t, count, int64(0))
 
 	// GET foo == ERR
 	_, err = c.Get("foo")

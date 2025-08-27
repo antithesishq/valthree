@@ -121,6 +121,8 @@ func (s *Server) handle(conn redcon.Conn, cmd redcon.Command) {
 		s.set(conn, args)
 	case op.Del:
 		s.del(conn, args)
+	case op.Count:
+		s.count(conn, args)
 	case op.FlushAll:
 		s.flushAll(conn, args)
 	case op.Ping:
@@ -216,6 +218,20 @@ func (s *Server) del(conn redcon.Conn, args []string) {
 		return
 	}
 	conn.WriteInt(n)
+}
+
+func (s *Server) count(conn redcon.Conn, args []string) {
+	if len(args) > 0 {
+		writeErrArity(conn, op.Count)
+		return
+	}
+
+	items, err := s.store.GetDB()
+	if err != nil {
+		writeErr(conn, err)
+		return
+	}
+	conn.WriteInt(len(items))
 }
 
 func (s *Server) flushAll(conn redcon.Conn, args []string) {

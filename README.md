@@ -5,7 +5,7 @@ Unlike traditional implementations, Valthree servers are stateless and designed 
 Clusters offer [strong serializable consistency][strong-serializable] and the same 99.999999999% durability as S3.
 
 Applications connect to a Valthree cluster using any Valkey or Redis client library.
-Clusters support the `GET`, `SET`, `DEL`, `FLUSHALL`, `PING`, and `QUIT` commands.
+Clusters support the `GET`, `SET`, `DEL`, `COUNT`, `FLUSHALL`, `PING`, and `QUIT` commands.
 
 > [!IMPORTANT]
 > **We built Valthree to show off [Antithesis][antithesis], our platform for testing distributed systems.**

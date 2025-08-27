@@ -69,6 +69,7 @@ func GenWorkloads(r *rand.Rand) [][]porcupine.Operation {
 		op.Set,
 		op.Set,
 		op.Del,
+		op.Count,
 	}
 	for clientId := range workloads {
 		key := keys[clientId%len(keys)]
@@ -105,6 +106,13 @@ func RunWorkload(logger *slog.Logger, client *client.Client, workload []porcupin
 			out.Err = client.Set(in.Key, in.Value)
 		case op.Del:
 			out.Err = client.Del(in.Key)
+		case op.Count:
+			count, err := client.Count()
+			if err != nil {
+				out.Err = err
+			} else {
+				out.Value = fmt.Sprintf("%d", count)
+			}
 		default:
 			panic(fmt.Sprintf("run workload: unexpected operation %v", in.Op))
 		}
@@ -204,6 +212,15 @@ func newModel() porcupine.Model {
 				}
 				// Delete definitely succeeded, so the key must be missing.
 				return true, newSet()
+			case op.Count:
+				// Count operations don't change the database state, so we just verify
+				// that the operation succeeded and return the same state.
+				if out.Err != nil {
+					// Count failed, but doesn't affect the database state.
+					return true, db
+				}
+				// Count succeeded, database state unchanged.
+				return true, db
 			default:
 				panic(fmt.Sprintf("step model: unexpected operation %v", in.Op))
 			}
@@ -238,6 +255,8 @@ func describe(in *args, out *rets) string {
 		return fmt.Sprintf("SET %s %s = %s", in.Key, in.Value, result)
 	case op.Del:
 		return fmt.Sprintf("DEL %s = %s", in.Key, result)
+	case op.Count:
+		return fmt.Sprintf("COUNT = %s", result)
 	default:
 		panic(fmt.Sprintf("describe: unexpected operation %v", in.Op))
 	}
