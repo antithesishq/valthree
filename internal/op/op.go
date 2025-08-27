@@ -12,6 +12,7 @@ const (
 	Set      Op = "set"
 	Del      Op = "del"
 	FlushAll Op = "flushall"
+	Count    Op = "count"
 	Ping     Op = "ping"
 	Quit     Op = "quit"
 )

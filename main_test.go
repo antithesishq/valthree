@@ -24,24 +24,55 @@ func TestExample(t *testing.T) {
 	clients := servertest.NewCluster(t, 1 /* num clients */)
 	c := clients[0]
 
+	// COUNT == 0 (empty database)
+	count, err := c.Count()
+	attest.Ok(t, err)
+	attest.Equal(t, count, 0)
+
 	// GET foo == ERR
-	_, err := c.Get("foo")
+	_, err = c.Get("foo")
 	attest.ErrorIs(t, err, client.ErrNotFound)
 
 	// SET foo bar == OK
 	attest.Ok(t, c.Set("foo", "bar"))
+
+	// COUNT == 1
+	count, err = c.Count()
+	attest.Ok(t, err)
+	attest.Equal(t, count, 1)
 
 	// GET foo == bar
 	val, err := c.Get("foo")
 	attest.Ok(t, err)
 	attest.Equal(t, val, "bar")
 
+	// SET baz qux == OK
+	attest.Ok(t, c.Set("baz", "qux"))
+
+	// COUNT == 2
+	count, err = c.Count()
+	attest.Ok(t, err)
+	attest.Equal(t, count, 2)
+
 	// DEL foo == OK
 	attest.Ok(t, c.Del("foo"))
+
+	// COUNT == 1
+	count, err = c.Count()
+	attest.Ok(t, err)
+	attest.Equal(t, count, 1)
 
 	// GET foo == ERR
 	_, err = c.Get("foo")
 	attest.ErrorIs(t, err, client.ErrNotFound)
+
+	// FlushAll
+	attest.Ok(t, c.FlushAll())
+
+	// COUNT == 0
+	count, err = c.Count()
+	attest.Ok(t, err)
+	attest.Equal(t, count, 0)
 }
 
 func TestStrongSerializable(t *testing.T) {

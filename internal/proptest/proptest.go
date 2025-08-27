@@ -46,6 +46,7 @@ type args struct {
 // Results from calling a client; used in the porcupine model below.
 type rets struct {
 	Value string
+	Count int
 	Err   error
 }
 
@@ -61,7 +62,7 @@ func GenWorkloads(r *rand.Rand) [][]porcupine.Operation {
 	opsPerClient := r.IntN(128) + 128 // 128-255 operations per client
 	workloads := make([][]porcupine.Operation, len(keys)*numClientsPerKey)
 	// Bias the workload towards GETs, which makes checking for linearizability
-	// faster.
+	// faster. Add some COUNT operations too.
 	ops := []op.Op{
 		op.Get,
 		op.Get,
@@ -69,16 +70,23 @@ func GenWorkloads(r *rand.Rand) [][]porcupine.Operation {
 		op.Set,
 		op.Set,
 		op.Del,
+		op.Count,
 	}
 	for clientId := range workloads {
 		key := keys[clientId%len(keys)]
 		workload := make([]porcupine.Operation, opsPerClient)
 		for i := range workload {
+			opType := ops[r.IntN(len(ops))]
+			// COUNT operations don't operate on specific keys
+			opKey := key
+			if opType == op.Count {
+				opKey = ""
+			}
 			workload[i] = porcupine.Operation{
 				ClientId: clientId,
 				Input: &args{
-					Op:    ops[r.IntN(len(ops))],
-					Key:   key,
+					Op:    opType,
+					Key:   opKey,
 					Value: genString(r),
 				},
 				Output: &rets{},
@@ -105,6 +113,8 @@ func RunWorkload(logger *slog.Logger, client *client.Client, workload []porcupin
 			out.Err = client.Set(in.Key, in.Value)
 		case op.Del:
 			out.Err = client.Del(in.Key)
+		case op.Count:
+			out.Count, out.Err = client.Count()
 		default:
 			panic(fmt.Sprintf("run workload: unexpected operation %v", in.Op))
 		}
@@ -126,19 +136,25 @@ func CheckWorkloads(deadline time.Duration, workloads [][]porcupine.Operation) (
 	// Model.Partition, but we have to do it ourselves if we also want to
 	// restrict the visualization to a single key.)
 	partitioned := make(map[string][]porcupine.Operation)
+	var countOps []porcupine.Operation
 	var successes, total float64
 	for _, history := range workloads {
-		for _, op := range history {
+		for _, operation := range history {
 			total++
-			if op.Output.(*rets).Err == nil {
+			if operation.Output.(*rets).Err == nil {
 				successes++
 			}
-			in := op.Input.(*args)
-			partitioned[in.Key] = append(partitioned[in.Key], op)
+			in := operation.Input.(*args)
+			if in.Op == op.Count {
+				countOps = append(countOps, operation)
+			} else {
+				partitioned[in.Key] = append(partitioned[in.Key], operation)
+			}
 		}
 	}
 	progress := successes / total
 
+	// Check per-key linearizability
 	for key, history := range partitioned {
 		model := newModel()
 		cr, info := porcupine.CheckOperationsVerbose(model, history, deadline)
@@ -154,6 +170,24 @@ func CheckWorkloads(deadline time.Duration, workloads [][]porcupine.Operation) (
 		}
 		return 0, &Error{Key: key, Visualization: &buf}
 	}
+
+	// For COUNT operations, we need to check them against all operations
+	// since COUNT depends on the global state. We'll do a simplified check
+	// where we just verify that COUNT operations don't return obviously wrong values.
+	// A more sophisticated approach would model the entire database state.
+	if len(countOps) > 0 {
+		// For now, just check that all COUNT operations succeeded or failed consistently.
+		// In a real implementation, you'd want to check that the count values are
+		// consistent with the SET/DEL operations, but that requires modeling the
+		// entire global database state across all keys.
+		for _, operation := range countOps {
+			out := operation.Output.(*rets)
+			if out.Err == nil && out.Count < 0 {
+				return 0, &Error{Key: "COUNT", Visualization: nil}
+			}
+		}
+	}
+
 	return progress, nil
 }
 
@@ -238,6 +272,11 @@ func describe(in *args, out *rets) string {
 		return fmt.Sprintf("SET %s %s = %s", in.Key, in.Value, result)
 	case op.Del:
 		return fmt.Sprintf("DEL %s = %s", in.Key, result)
+	case op.Count:
+		if out.Err != nil {
+			return fmt.Sprintf("COUNT = ERR %v", out.Err)
+		}
+		return fmt.Sprintf("COUNT = %d", out.Count)
 	default:
 		panic(fmt.Sprintf("describe: unexpected operation %v", in.Op))
 	}

@@ -156,6 +156,27 @@ func (c *Client) FlushAll() error {
 	return nil
 }
 
+// Count returns the number of keys in the database.
+func (c *Client) Count() (int, error) {
+	if c.connErr != nil {
+		return 0, fmt.Errorf("conn unusable: %w", c.connErr)
+	}
+	res, err := c.conn.Do("COUNT")
+	if err != nil {
+		return 0, err
+	}
+	r, ok := res.(int64)
+	if !ok {
+		return 0, fmt.Errorf("unexpected count response type: %T", res)
+	}
+	if err := c.conn.Err(); err != nil {
+		c.connErr = err
+		_ = c.conn.Close()
+		return 0, fmt.Errorf("conn unusable: %w", err)
+	}
+	return int(r), nil
+}
+
 // Close the underlying connection.
 func (c *Client) Close() error {
 	if c.connErr != nil {
