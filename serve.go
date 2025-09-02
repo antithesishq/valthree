@@ -13,6 +13,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func init() {
+	rootCmd.AddCommand(serveCmd)
+
+	serveCmd.Flags().String("addr", ":6379", "address to listen on")
+	serveCmd.Flags().String("name", "valthree", "database name")
+	serveCmd.Flags().Int("max-keys", 16384, "maximum number of stored keys")
+	serveCmd.Flags().String("s3-addr", "http://minio:9000", "object storage address")
+	serveCmd.Flags().String("s3-region", "us-east-1", "object storage region")
+	serveCmd.Flags().String("s3-bucket", "valthree", "object storage bucket")
+	serveCmd.Flags().String("s3-user", "admin", "object storage user")
+	serveCmd.Flags().String("s3-pass", "password", "object storage password")
+	serveCmd.Flags().Duration("s3-timeout", time.Minute, "object storage timeout")
+}
+
 var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the Valthree server",
@@ -60,18 +74,4 @@ var serveCmd = &cobra.Command{
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 		<-sig
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(serveCmd)
-
-	serveCmd.Flags().String("addr", ":6379", "address to listen on")
-	serveCmd.Flags().String("name", "valthree", "database name")
-	serveCmd.Flags().Int("max-keys", 16384, "maximum number of stored keys")
-	serveCmd.Flags().String("s3-addr", "http://minio:9000", "object storage address")
-	serveCmd.Flags().String("s3-region", "us-east-1", "object storage region")
-	serveCmd.Flags().String("s3-bucket", "valthree", "object storage bucket")
-	serveCmd.Flags().String("s3-user", "admin", "object storage user")
-	serveCmd.Flags().String("s3-pass", "password", "object storage password")
-	serveCmd.Flags().Duration("s3-timeout", time.Minute, "object storage timeout")
 }
