@@ -1,8 +1,7 @@
 # valthree = valkey + S3
 
-**Valthree is a Valkey- and Redis-compatible database backed by S3.**
-Unlike traditional implementations, Valthree servers are stateless and designed to run behind a load balancer.
-Clusters offer [strong serializable consistency][strong-serializable] and the same 99.999999999% durability as S3.
+**Valthree is a clustered, Valkey- and Redis-compatible database backed by S3.**
+Clusters offer [strong serializable consistency][strong-serializable] and have the same 99.999999999% durability as S3.
 
 Applications connect to a Valthree cluster using any Valkey or Redis client library.
 Clusters support the `GET`, `SET`, `DEL`, `FLUSHALL`, `PING`, and `QUIT` commands.
@@ -15,85 +14,74 @@ Clusters support the `GET`, `SET`, `DEL`, `FLUSHALL`, `PING`, and `QUIT` command
 > For more on Valthree's design, testing strategy, and Antithesis integration, read on.
 > If you'd rather see a mission-critical distributed database tested with Antithesis, head over to [etcd][etcd-antithesis].
 
-<!-- TODO: embed a video covering all of this -->
+<!-- TODO: embed a video covering this and showing reports -->
 
 ## :triangular_ruler: Design
 
 Valthree clusters persist the whole key-value database as a *single* JSON file in object storage.
-To preserve consistency, clusters use optimistic concurrency control:
+Clusters preserve consistency with optimistic concurrency control:
 
 - To handle `SET` and `DEL` commands, servers read the database file from object storage, modify it, and write it back with the `If-Match` header.
-  If another process has modified the database during the read-modify-write cycle, the database's ETag changes, the write fails, and the client receives an error.
-- To handle `GET` commands, servers read the database file from object storage (without any caching).
+  If another process has modified the file during the read-modify-write cycle, the file's ETag changes, the write fails, and the client receives an error.
+- To handle `GET` commands, servers read the file from object storage (without any caching).
 - To handle `FLUSHALL` commands, servers delete the database file.
 
-This is terrible for performance &mdash; all writes conflict with each other! &mdash; but it's simple enough to implement in [just two files](./internal/server).
+```
+
+                       ┌──────────┐                                    ┌─────────┐
+                     ┌──────────┐ │                                    │         │
+─── 1) SET a b ──┐ ┌──────────┐ │ │ ┌──── 2) ETag:123 {"a": "x"} ────  │   S3    │
+                 │ │          │ │ │ │                                  │ db.json │
+◄──── 4) OK ─────┘ │ valthree │ │─┘ └─ 3) If-Match:123 {"a": "b"} ──►  │         │
+                   │          │─┘                                      │         │
+                   └──────────┘                                        └─────────┘
+
+```
+
+This design is terrible for performance &mdash; all writes conflict with each other! &mdash; but it's simple enough to implement in [just two files](./internal/server).
 Keeping the implementation small lets us focus on testing.
 
-```
+## :bug: Testing with Antithesis
 
-    ┌──────────┐                                  ┌─────────┐
-  ┌──────────┐ │              reads               │         │
-┌──────────┐ │ │  ◄─────────────────────────────  │   S3    │
-│ valthree │ │ │                                  │ db.json │
-│          │ │─┘  ─────────────────────────────►  │         │
-│          │─┘         conditional writes         │         │
-└──────────┘                                      └─────────┘
+Valthree uses [Antithesis][antithesis] to make sure that clusters remain consistent &mdash;
+even in the face of faulty networks, unreliable disks, unsynchronized clocks, and all the other indignities of production environments.
+Rather than maintaining a tightly-coupled, ever-growing pile of traditional tests, Antithesis lets us thoroughly test Valthree with just one black-box test.
 
-```
+Valthree's tests rely on [_property-based testing_][pbt].
+Rather than running a hard-coded series of commands and then asserting the exact state of the database, Valthree's tests spin up multiple clients, each of which executes a randomly-generated workload.
+Periodically, the tests verify that the clients haven't observed any inconsistencies.
+When run in Antithesis's deterministic environment and driven by our autonomous exploration engine, this one test finds Valthree's deepest bugs, makes them perfectly reproducible, and even lets us interactively debug failures.
 
-## :white_check_mark: Testing
+The best places to start browsing Valthree's code are the entrypoints for [the server](./server.go) and [the Antithesis tests](./workload.go).
+On each commit, [a Github Action](./.github/workflows/ci.yaml) builds them into a container (defined in [Dockerfile.valthree](./Dockerfile.valthree)) and pushes them to Antithesis's artifact registry.
+The same Github Action also pushes a [Docker Compose file](./docker-compose.yaml) that stiches together MinIO, a three-node Valthree cluster, and the test workload.
+Antithesis spins up the whole system, thoroughly explores its behavior, and produces a report of any failures.
 
-### Example-based testing
+Valthree's code includes examples of:
 
-Valthree has only one traditional, example-based unit test: `TestExample` in [`main_test.go`](./main_test.go).
-It's straightforward but limited.
-There's just one server and one client, so it doesn't test our optimistic concurrency control.
-It *certainly* doesn't test whether Valthree delivers on its consistency and durability claims in fault-prone production environments.
-Even without Antithesis, we can do much better.
+- [Using the Antithesis Github Action](./.github/workflows/ci.yaml) ([docs][action-docs])
+- [Defining custom properties][assertions] with the Antithesis SDK ([docs][properties-docs])
+- [Instrumenting][instrumentation] a Go binary for coverage-assisted exploration ([docs][instrumentation-docs])
+- [Emulating an AWS service][minio] in Antithesis ([docs][3p-docs])
+- Maintaining a [local test workload](./main_test.go) for quick iteration (though it doesn't have fault injection or intelligent exploration)
 
-### Property-based testing
-
-`TestStrongSerializable`, also in [`main_test.go`](./main_test.go), is much more effective.
-It uses a cluster of Valthree servers and multiple clients per server.
-And rather than executing a fixed sequence of operations, each client runs a randomly-generated workload and records the results.
-Compared to our example-based test, property-based testing exercises Valthree much more thoroughly.
-
-But with a randomly-generated, concurrent workload, it's harder to verify Valthree's correctness.
-Consider two clients, each issuing a command at the same time: one sends `SET foo bar`, and the other sends `SET foo quux`.
-Both `SET`s succeed.
-What should subsequent `GET foo` calls return?
-It's hard to say &mdash; it depends on the vagaries of thread scheduling, network timing, and many other factors.
-From our test's perspective, either `bar` or `quux` is correct.
-To handle this uncertainty, Valthree's tests use [porcupine][], an open source linearizability checker.
-We model each key as a set of possible values, updating the possibilities with each operation.
-Porcupine checks the clients' observations against this model.
-This is computationally difficult (it's NP-hard!), but porcupine uses some [fancy tricks][p-compositionality] to make checking as fast as possible.
-
-The machinery for this style of testing is in [`internal/proptest`](./internal/proptest/).
-The three key pieces &mdash; workload generation, workload execution, and model checking &mdash; are implemented as `GenWorkloads`, `RunWorkload`, and `CheckWorkloads`.
-No matter what sort of distributed system you're testing, this generate-execute-check pattern is applicable.
-Systems with strong invariants lend themselves to simpler checkers.
-For example, in any double-entry ledger, credits and debits must always be balanced.
-Systems without strong invariants, like key-value stores, need more complex checkers.
-Luckily, there are many good open source checkers available!
-
-So far, none of Valthree's testing depends on Antithesis.
-All the tests run locally, so we can iterate quickly and detect obvious bugs.
-But we still haven't tested that Valthree maintains its guarantees when the environment isn't quite so gentle.
-
-### Antithesis
-
-<!-- TODO -->
-
+See the [full Antithesis documentation][docs] for more information.
+If you'd prefer a live demo, [let us know][book-demo]!
 
 ## :hearts: Legal
 
 Offered under the [MIT License](LICENSE.md).
 
+[3p-docs]: https://antithesis.com/docs/reference/dependencies/
+[action-docs]: https://antithesis.com/docs/using_antithesis/ci/#github-actions
 [antithesis]: https://antithesis.com
+[assertions]: https://github.com/search?q=repo%3Aantithesishq%2Fvalthree+%22assert.%22&type=code
+[book-demo]: https://antithesis.com/book-a-demo/
+[docs]: https://antithesis.com/docs/
 [etcd-antithesis]: https://github.com/etcd-io/etcd/tree/main/tests/antithesis
+[instrumentation-docs]: https://antithesis.com/docs/instrumentation/
+[instrumentation]: https://github.com/search?q=repo%3Aantithesishq%2Fvalthree%20antithesis-go-instrumentor&type=code
+[minio]: https://github.com/search?q=repo%3Aantithesishq%2Fvalthree+%22container_name%3A+minio%22&type=code
+[pbt]: https://antithesis.com/resources/property_based_testing/
+[properties-docs]: https://antithesis.com/docs/instrumentation/
 [strong-serializable]: https://antithesis.com/resources/reliability_glossary/#strong-serializable
-[stable-go]: https://golang.org/doc/devel/release#policy
-[porcupine]: https://github.com/anishathalye/porcupine
-[p-compositionality]: https://arxiv.org/pdf/1504.00204

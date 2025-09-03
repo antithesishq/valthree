@@ -10,39 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/antithesishq/valthree/internal/client"
 	"github.com/antithesishq/valthree/internal/proptest"
 	"github.com/antithesishq/valthree/internal/servertest"
 	"go.akshayshah.org/attest"
 )
 
 const EnvSeeds = "SEEDS"
-
-func TestExample(t *testing.T) {
-	// This is a simple integration test: it doesn't use property-based testing
-	// or Antithesis.
-	clients := servertest.NewCluster(t, 1 /* num clients */)
-	c := clients[0]
-
-	// GET foo == ERR
-	_, err := c.Get("foo")
-	attest.ErrorIs(t, err, client.ErrNotFound)
-
-	// SET foo bar == OK
-	attest.Ok(t, c.Set("foo", "bar"))
-
-	// GET foo == bar
-	val, err := c.Get("foo")
-	attest.Ok(t, err)
-	attest.Equal(t, val, "bar")
-
-	// DEL foo == OK
-	attest.Ok(t, c.Del("foo"))
-
-	// GET foo == ERR
-	_, err = c.Get("foo")
-	attest.ErrorIs(t, err, client.ErrNotFound)
-}
 
 func TestStrongSerializable(t *testing.T) {
 	// This is a property-based test. Rather than testing with hard-coded
