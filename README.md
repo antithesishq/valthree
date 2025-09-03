@@ -10,9 +10,9 @@ Clusters support the `GET`, `SET`, `DEL`, `FLUSHALL`, `PING`, and `QUIT` command
 > **We built Valthree to show off [Antithesis][antithesis], our platform for testing distributed systems.**
 > Rather than prioritizing performance or feature parity with Valkey, we've kept this project simple: it's real enough to have bugs, but small enough to understand quickly.
 > Please don't rely on Valthree in production!
->
-> For more on Valthree's design, testing strategy, and Antithesis integration, read on.
-> If you'd rather see a mission-critical distributed database tested with Antithesis, head over to [etcd][etcd-antithesis].
+
+For more on Valthree's design and tests, read on.
+If you'd rather see a mission-critical distributed database tested with Antithesis, head over to [etcd][etcd-antithesis].
 
 <!-- TODO: embed a video covering this and showing reports -->
 
@@ -30,7 +30,7 @@ Clusters preserve consistency with optimistic concurrency control:
 
                        ┌──────────┐                                    ┌─────────┐
                      ┌──────────┐ │                                    │         │
-──► 1) SET a b ──┐ ┌──────────┐ │ │ ┌──── 2) ETag:123 {"a": "x"} ◄───  │   S3    │
+──► 1) SET a b ──┐ ┌──────────┐ │ │ ┌─────── 2) ETag:123 {} ◄────────  │   S3    │
                  │ │          │ │ │ │                                  │ db.json │
 ◄──── 4) OK ◄────┘ │ valthree │ │─┘ └► 3) If-Match:123 {"a": "b"} ──►  │         │
                    │          │─┘                                      │         │
@@ -48,11 +48,11 @@ even in the face of faulty networks, unreliable disks, unsynchronized clocks, an
 Rather than maintaining a tightly-coupled, ever-growing pile of traditional tests, Antithesis lets us thoroughly test Valthree with just one black-box test.
 
 Valthree's test relies on [_property-based testing_][pbt].
-Instead of running a hard-coded series of commands and then asserting the exact state of the database, Valthree's tests spin up multiple clients, each of which executes a randomly-generated workload.
-Periodically, the tests verify that the clients haven't observed any inconsistencies.
+Instead of running a hard-coded series of commands and then asserting the exact state of the database, Valthree's test spins up multiple clients, each of which executes a randomly-generated workload.
+Periodically, the test verifies that the clients haven't observed any inconsistencies.
 When run in Antithesis's deterministic environment and driven by our autonomous exploration engine, this one test finds Valthree's deepest bugs, makes them perfectly reproducible, and even lets us interactively debug failures.
 
-The best places to start browsing Valthree's code are the entrypoints for [the server](./server.go) and [the Antithesis tests](./workload.go).
+The best places to start browsing Valthree's code are the entrypoints for [the server](./server.go) and [the Antithesis test](./workload.go).
 On each commit, [a Github Action](./.github/workflows/ci.yaml) builds them into a container (defined in [Dockerfile.valthree](./Dockerfile.valthree)) and pushes them to Antithesis's artifact registry.
 The same Github Action also pushes a [Docker Compose file](./docker-compose.yaml) that stiches together MinIO, a three-node Valthree cluster, and the test workload.
 Antithesis spins up the whole system, thoroughly explores its behavior, and produces a report of any failures.
