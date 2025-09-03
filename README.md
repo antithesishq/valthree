@@ -30,9 +30,9 @@ Clusters preserve consistency with optimistic concurrency control:
 
                        ┌──────────┐                                    ┌─────────┐
                      ┌──────────┐ │                                    │         │
-─── 1) SET a b ──┐ ┌──────────┐ │ │ ┌──── 2) ETag:123 {"a": "x"} ────  │   S3    │
+──► 1) SET a b ──┐ ┌──────────┐ │ │ ┌──── 2) ETag:123 {"a": "x"} ◄───  │   S3    │
                  │ │          │ │ │ │                                  │ db.json │
-◄──── 4) OK ─────┘ │ valthree │ │─┘ └─ 3) If-Match:123 {"a": "b"} ──►  │         │
+◄──── 4) OK ◄────┘ │ valthree │ │─┘ └► 3) If-Match:123 {"a": "b"} ──►  │         │
                    │          │─┘                                      │         │
                    └──────────┘                                        └─────────┘
 
@@ -47,8 +47,8 @@ Valthree uses [Antithesis][antithesis] to make sure that clusters remain consist
 even in the face of faulty networks, unreliable disks, unsynchronized clocks, and all the other indignities of production environments.
 Rather than maintaining a tightly-coupled, ever-growing pile of traditional tests, Antithesis lets us thoroughly test Valthree with just one black-box test.
 
-Valthree's tests rely on [_property-based testing_][pbt].
-Rather than running a hard-coded series of commands and then asserting the exact state of the database, Valthree's tests spin up multiple clients, each of which executes a randomly-generated workload.
+Valthree's test relies on [_property-based testing_][pbt].
+Instead of running a hard-coded series of commands and then asserting the exact state of the database, Valthree's tests spin up multiple clients, each of which executes a randomly-generated workload.
 Periodically, the tests verify that the clients haven't observed any inconsistencies.
 When run in Antithesis's deterministic environment and driven by our autonomous exploration engine, this one test finds Valthree's deepest bugs, makes them perfectly reproducible, and even lets us interactively debug failures.
 
