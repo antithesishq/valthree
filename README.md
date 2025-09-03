@@ -41,7 +41,7 @@ Clusters preserve consistency with optimistic concurrency control:
 This design is terrible for performance &mdash; all writes conflict with each other! &mdash; but it's simple enough to implement in [just two files](./internal/server).
 Keeping the implementation small lets us focus on testing.
 
-## :bug: Testing with Antithesis
+## :monocle_face: Testing with Antithesis
 
 Valthree uses [Antithesis][antithesis] to make sure that clusters remain consistent &mdash;
 even in the face of faulty networks, unreliable disks, unsynchronized clocks, and all the other indignities of production environments.
