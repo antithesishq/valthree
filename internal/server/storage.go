@@ -13,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/aws/smithy-go"
 )
 
 var errMismatchedETag = fmt.Errorf("mismatched ETags")
@@ -31,11 +30,8 @@ func (s *storage) EnsureBucketExists() error {
 	_, err := s.client.CreateBucket(context.Background(), &s3.CreateBucketInput{
 		Bucket: aws.String(s.bucket),
 	})
-	if err != nil {
-		var apiErr smithy.APIError
-		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "BucketAlreadyOwnedByYou" {
-			return nil
-		}
+	if hasSmithyCode(err, "BucketAlreadyOwnedByYou") {
+		return nil
 	}
 	return err
 }
@@ -131,23 +127,17 @@ func (s *storage) setDB(items map[string]string, etag string) error {
 		Key:    aws.String(s.name),
 		Body:   bytes.NewReader(bs),
 	}
-	if etag == "" {
-		input.IfNoneMatch = aws.String("*")
-	} else {
-		input.IfMatch = aws.String(etag)
-	}
 
 	_, err = s.client.PutObject(ctx, input)
+	if hasSmithyCode(err, "PreconditionFailed") {
+		// This is the most critical code in the Valthree server: to enter this
+		// branch, we must set the If-None-Match or If-Match headers properly,
+		// which ensures that writes are serialized. Antithesis must exercise
+		// this code path.
+		assert.Reachable("Exercised optimistic concurrency control rollback", nil)
+		return errMismatchedETag
+	}
 	if err != nil {
-		var apiErr smithy.APIError
-		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "PreconditionFailed" {
-			// This is the most critical code in the Valthree server: to enter this
-			// branch, we must set the If-None-Match or If-Match headers properly,
-			// which ensures that writes are serialized. Antithesis must exercise
-			// this code path.
-			assert.Reachable("Exercised optimistic concurrency control rollback", nil)
-			return errMismatchedETag
-		}
 		// Of course, we should also exercise other errors in the write path.
 		assert.Reachable("Exercised failures writing to object storage", nil)
 		return fmt.Errorf("put object: %v", err)
