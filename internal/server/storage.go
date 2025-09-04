@@ -141,9 +141,10 @@ func (s *storage) setDB(items map[string]string, etag string) error {
 	if err != nil {
 		var apiErr smithy.APIError
 		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "PreconditionFailed" {
-			// This is the most critical code in the Valthree server: it ensures that
-			// writes are serialized, even when clients connect to different Valthree
-			// servers. It's critical that Antithesis exercise this code path.
+			// This is the most critical code in the Valthree server: to enter this
+			// branch, we must set the If-None-Match or If-Match headers properly,
+			// which ensures that writes are serialized. Antithesis must exercise
+			// this code path.
 			assert.Reachable("Exercised optimistic concurrency control rollback", nil)
 			return errMismatchedETag
 		}

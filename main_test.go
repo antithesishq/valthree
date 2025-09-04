@@ -18,6 +18,9 @@ import (
 const EnvSeeds = "SEEDS"
 
 func TestStrongSerializable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testcontainers in short mode")
+	}
 	// This is a property-based test. Rather than testing with hard-coded
 	// example inputs, we generate a random workload, execute it, and verify
 	// that the results do not violate Valthree's strong serializable
@@ -83,7 +86,7 @@ func TestStrongSerializable(t *testing.T) {
 		timeout = time.Until(deadline)
 	}
 	_, err := proptest.CheckWorkloads(timeout, workloads)
-	if attest.Ok(t, err, attest.Sprintf("strong serializability violated")) {
+	if attest.Ok(t, err, attest.Sprintf("strong serializability violated"), attest.Continue()) {
 		return
 	}
 	// Porcupine produces interactive visualizations to help debug any failures.

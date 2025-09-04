@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
-	"slices"
 	"time"
 
 	"github.com/anishathalye/porcupine"
@@ -158,52 +157,57 @@ func CheckWorkloads(deadline time.Duration, workloads [][]porcupine.Operation) (
 }
 
 func newModel() porcupine.Model {
-	return porcupine.Model{
-		Init: func() any { return newSet() },
-		Step: func(state, input, output any) (bool, any) {
+	// Models the state of a single value in the DB as a *string, with nil
+	// representing a missing key.
+	nondeterministic := &porcupine.NondeterministicModel{
+		Init: func() []any { return []any{(*string)(nil)} },
+		Step: func(state, input, output any) []any {
 			in := input.(*args)
 			out := output.(*rets)
-			db := state.(*set)
+			db := state.(*string)
 			switch in.Op {
 			case op.Get:
 				if out.Err != nil {
 					if !errors.Is(out.Err, client.ErrNotFound) {
-						// Other failures don't affect the set of valid values.
-						return true, db
+						// Errors apart from ErrNotFound are acceptable regardless of DB
+						// state. Expected DB state is unchanged.
+						return []any{db}
 					}
-					// Missing keys may be represented by an empty set or a set
-					// containing the empty string.
-					if db.Contains("") || db.Len() == 0 {
-						// We now know that the key is definitely missing.
-						return true, newSet()
+					if db == nil {
+						// GET returned ErrNotFound and we expected the key to be missing.
+						// Expected DB state is unchanged.
+						return []any{db}
 					}
-					// Server returned ErrNotFound, but the key was definitely present.
-					return false, db
+					// GET returned ErrNotFound but we expected the key to be present.
+					// After this anomaly, no subsequent states are valid.
+					return nil
 				}
-				if db.Contains(out.Value) {
-					// We now know the key's value.
-					return true, newSet(out.Value)
+				if db == nil {
+					// GET returned a value, but we expected the key to be missing.
+					return nil
 				}
-				// Server returned an invalid value.
-				return false, db
+				if *db == out.Value {
+					// GET returned the expected value. Expected DB state is unchanged.
+					return []any{db}
+				}
+				// GET returned a value that doesn't match expectations. No further
+				// states are valid.
+				return nil
 			case op.Set:
+				newValue := in.Value
 				if out.Err != nil {
 					// Write may have succeeded, so we expand the set of valid values.
-					if db.Len() == 0 {
-						return true, db.With("", in.Value)
-					}
-					return true, db.With(in.Value)
+					return []any{db, &newValue}
 				}
 				// Write definitely succeeded, so there's only one valid value.
-				return true, newSet(in.Value)
+				return []any{&newValue}
 			case op.Del:
 				if out.Err != nil {
-					// Delete may have succeeded: represent the potential absence
-					// of the key with an empty string.
-					return true, db.With("")
+					// Delete may have succeeded.
+					return []any{db, (*string)(nil)}
 				}
 				// Delete definitely succeeded, so the key must be missing.
-				return true, newSet()
+				return []any{(*string)(nil)}
 			default:
 				panic(fmt.Sprintf("step model: unexpected operation %v", in.Op))
 			}
@@ -211,15 +215,23 @@ func newModel() porcupine.Model {
 		DescribeOperation: func(input, output any) string {
 			return describe(input.(*args), output.(*rets))
 		},
+		DescribeState: func(db any) string {
+			val := db.(*string)
+			if val == nil {
+				return ""
+			}
+			return *val
+		},
 		Equal: func(left, right any) bool {
-			if left == nil || right == nil {
+			l := left.(*string)
+			r := right.(*string)
+			if l == nil || r == nil {
 				return left == right
 			}
-			l := left.(*set)
-			r := right.(*set)
-			return slices.Equal(l.Items(), r.Items())
+			return *l == *r
 		},
 	}
+	return nondeterministic.ToModel()
 }
 
 func describe(in *args, out *rets) string {
@@ -228,7 +240,8 @@ func describe(in *args, out *rets) string {
 		result = "OK"
 	}
 	if out.Err != nil {
-		result = fmt.Sprintf("ERR %v", out.Err)
+		// Extreme brevity improves the visualization.
+		result = "ERR"
 	}
 
 	switch in.Op {
