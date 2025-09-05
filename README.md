@@ -1,14 +1,14 @@
 # valthree = valkey + S3
 
-**Valthree is a clustered, Valkey- and Redis-compatible database backed by S3.**
-Clusters offer [strong serializable consistency][strong-serializable] and have the same 99.999999999% durability as S3.
+**Valthree is a strongly consistent, distributed, Valkey-compatible database.**
 
+Under the hood, Valkey nodes write all data directly to S3.
+Clusters offer [strong serializable consistency][strong-serializable] and inherit S3's 99.999999999% durability.
 Applications connect to a Valthree cluster using any Valkey or Redis client library.
-Clusters support the `GET`, `SET`, `DEL`, `FLUSHALL`, `PING`, and `QUIT` commands.
 
 > [!IMPORTANT]
 > **We built Valthree to show off [Antithesis][antithesis], our platform for testing distributed systems.**
-> Rather than prioritizing performance or feature parity with Valkey, we've kept this project simple: it's real enough to have bugs, but small enough to understand quickly.
+> We've intentionally kept this project simple: it's complex enough to have bugs, but small enough to understand quickly.
 > Please don't rely on Valthree in production!
 
 For more on Valthree's design and tests, read on.
@@ -21,10 +21,9 @@ If you'd rather see a mission-critical distributed database tested with Antithes
 Valthree clusters persist the whole key-value database as a *single* JSON file in object storage.
 Clusters preserve consistency with optimistic concurrency control:
 
-- To handle `SET` and `DEL` commands, servers read the database file from object storage, modify it, and write it back with the `If-Match` header.
+- Servers handle writes with a read-modify-write cycle: Valthree reads the database file from object storage, modifies it, and writes it back with the `If-Match` header.
   If another process has modified the file during the read-modify-write cycle, the file's ETag changes, the write fails, and the client receives an error.
-- To handle `GET` commands, servers read the file from object storage (without any caching).
-- To handle `FLUSHALL` commands, servers delete the database file.
+- Valthree serves reads directly from object storage (without any caching).
 
 ```
 
@@ -48,7 +47,7 @@ even in the face of faulty networks, unreliable disks, unsynchronized clocks, an
 Rather than maintaining a tightly-coupled, ever-growing pile of traditional tests, Antithesis lets us thoroughly test Valthree with just one black-box test.
 
 Valthree's test relies on [_property-based testing_][pbt].
-Instead of running a hard-coded series of commands and then asserting the exact state of the database, Valthree's test spins up multiple clients, each of which executes a randomly-generated workload.
+Instead of running a hard-coded series of commands and then asserting the exact state of the database, Valthree's test executes a randomly-generated workload.
 Periodically, the test verifies that the clients haven't observed any inconsistencies.
 When run in Antithesis's deterministic environment and driven by our autonomous exploration engine, this one test finds Valthree's deepest bugs, makes them perfectly reproducible, and even lets us interactively debug failures.
 
