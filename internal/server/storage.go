@@ -43,13 +43,11 @@ func (s *storage) EnsureBucketExists() error {
 func (s *storage) MutateDB(f func(map[string]string) (int, error)) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	for {
 		items, etag, err := s.getDB()
 		if err != nil {
 			return 0, err
 		}
-
+	for {
 		n, err := f(items)
 		if err != nil {
 			return 0, err
