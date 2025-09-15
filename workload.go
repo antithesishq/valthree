@@ -69,18 +69,26 @@ var workloadCmd = &cobra.Command{
 		// and verifies that the cluster is strict serializable.
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+		var iterations int
 		for {
 			select {
 			case <-sig:
 				os.Exit(0)
 			default:
-				exerciseAndVerify(logger, addrs, checkTimeout, artifactDir)
+				exerciseAndVerify(iterations, logger, addrs, checkTimeout, artifactDir)
+				iterations++
 			}
 		}
 	},
 }
 
-func exerciseAndVerify(logger *slog.Logger, addrs []net.Addr, timeout time.Duration, artifactDir string) {
+func exerciseAndVerify(
+	iteration int,
+	logger *slog.Logger,
+	addrs []net.Addr,
+	timeout time.Duration,
+	artifactDir string,
+) {
 	seeds := []uint64{rand.Uint64(), rand.Uint64()}
 	logger = logger.With("pcg_seeds", seeds, "cluster_addrs", addrs)
 
@@ -105,6 +113,15 @@ func exerciseAndVerify(logger *slog.Logger, addrs []net.Addr, timeout time.Durat
 	logger.Debug("generating new workload")
 	r := rand.New(rand.NewPCG(seeds[0], seeds[1]))
 	workloads := proptest.GenWorkloads(r)
+	// In each test run, start without concurrency. This is purely for
+	// demonstration purposes - real workloads don't need this!
+	const serialIterations = 16
+	if iteration < serialIterations && len(workloads) > 1 {
+		workloads = workloads[:1]
+	}
+	if iteration == serialIterations {
+		logger.Info("allowing concurrent workloads")
+	}
 
 	// Run the workload, recording the timing and result of each operation. To
 	// maximize concurrent work, we block each client until all the clients are
