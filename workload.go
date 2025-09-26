@@ -168,7 +168,10 @@ func exerciseAndVerify(
 		// If integrating the SDK is difficult, Antithesis can also look for the
 		// presence or absence of particular log lines.
 		assert.Unreachable(
-			"Database is strong serializable", // appears as-is in Antithesis reports
+			// Formally, we've found a violation of strong serializability. But this
+			// string appears directly in the Antithesis UI, so we avoid academic
+			// terms to keep the demo accessible to a wide audience.
+			"Clients can always read their own writes",
 			map[string]any{"error": err.Error()},
 		)
 		logger.Error("strong serializability violated", "err", err)
