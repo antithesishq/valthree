@@ -5,10 +5,10 @@ go 1.25
 require (
 	github.com/anishathalye/porcupine v1.0.3
 	github.com/antithesishq/antithesis-sdk-go v0.4.4
-	github.com/aws/aws-sdk-go-v2 v1.38.0
+	github.com/aws/aws-sdk-go-v2 v1.40.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.4
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.87.0
-	github.com/aws/smithy-go v1.22.5
+	github.com/aws/smithy-go v1.23.2
 	github.com/gomodule/redigo v1.9.2
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.7
