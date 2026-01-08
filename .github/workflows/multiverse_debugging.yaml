@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Parse Session ID
         id: session-id
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           VERBATIM: ${{ github.event.inputs.moment }}
         with:
@@ -32,7 +32,7 @@ jobs:
             return sessionID;
       - name: Parse Input Hash
         id: input-hash
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           VERBATIM: ${{ github.event.inputs.moment }}
         with:
@@ -44,7 +44,7 @@ jobs:
             return inputHash;
       - name: Parse Virtual Time
         id: vtime
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           VERBATIM: ${{ github.event.inputs.moment }}
         with:
