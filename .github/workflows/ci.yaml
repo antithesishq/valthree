@@ -72,7 +72,7 @@ jobs:
           images: us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree
           tags: |
             type=sha
-            demo
+            latest
       - name: Build Valthree
         id: build-valthree
         uses: docker/build-push-action@v5
