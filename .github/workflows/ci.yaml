@@ -50,7 +50,7 @@ jobs:
           password: ${{ secrets.ANTITHESIS_GAR_KEY }}
       - name: Extract Config Metadata
         id: extract-config-metadata
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree-config
           tags: |
@@ -67,7 +67,7 @@ jobs:
           labels: ${{ steps.extract-config-metadata.outputs.labels }}
       - name: Extract Valthree Metadata
         id: extract-valthree-metadata
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: us-central1-docker.pkg.dev/molten-verve-216720/demo-repository/valthree
           tags: |
