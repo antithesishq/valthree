@@ -1,0 +1,66 @@
+---
+# Headless service gives each pod a stable DNS name:
+#   valthree-0.valthree.valthree.svc.cluster.local
+#   valthree-1.valthree.valthree.svc.cluster.local
+#   valthree-2.valthree.valthree.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: valthree
+  namespace: valthree
+spec:
+  clusterIP: None
+  selector:
+    app: valthree
+  ports:
+    - name: resp
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: valthree
+  namespace: valthree
+spec:
+  serviceName: valthree
+  replicas: 3
+  selector:
+    matchLabels:
+      app: valthree
+  podManagementPolicy: OrderedReady
+  template:
+    metadata:
+      labels:
+        app: valthree
+    spec:
+      containers:
+        - name: valthree
+          image: localhost/valthree:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/local/bin/valthree
+            - serve
+            - -v
+            - --json
+          ports:
+            - name: resp
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "PING"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "PING"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 10
+          resources:
+            requests:
+              cpu: 150m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
