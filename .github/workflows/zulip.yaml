@@ -19,7 +19,7 @@ jobs:
             core.setOutput("topic", topic);
             core.setOutput("msg", message);
       - name: Send Message
-        uses: zulip/github-actions-zulip/send-message@v1
+        uses: zulip/github-actions-zulip/send-message@v1.0.2
         with:
           api-key: ${{ secrets.ZULIP_API_KEY }}
           email: ${{ secrets.ZULIP_BOT_EMAIL }}
