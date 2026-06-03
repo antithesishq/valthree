@@ -1,6 +1,6 @@
 # To minimize startup time in Antithesis, this Dockerfile uses a two-stage
 # build to keep the final image small.
-FROM docker.io/library/golang:1.25-bookworm AS builder
+FROM docker.io/library/golang:1.26.4-bookworm AS builder
 LABEL maintainer="Antithesis <support@antithesis.com>"
 
 # We'll start by working with the code as it is in Github.
