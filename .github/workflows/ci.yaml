@@ -60,7 +60,7 @@ jobs:
             demo
       - name: Build Config
         id: build-config
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v7.1.0
         with:
           context: .
           file: Dockerfile.config
@@ -77,7 +77,7 @@ jobs:
             latest
       - name: Build Valthree
         id: build-valthree
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@v7.1.0
         with:
           context: .
           file: Dockerfile.valthree
