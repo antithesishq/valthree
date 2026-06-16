@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workload
+  namespace: valthree
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: workload
+  template:
+    metadata:
+      labels:
+        app: workload
+    spec:
+      containers:
+        - name: workload
+          image: localhost/valthree:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/local/bin/valthree
+            - workload
+            - -v
+            - --json
+            - --addrs
+            - "valthree-0.valthree.valthree.svc.cluster.local:6379,valthree-1.valthree.valthree.svc.cluster.local:6379,valthree-2.valthree.valthree.svc.cluster.local:6379"
+            - --artifacts
+            - /var/log/valthree/workload
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: workload-logs
+              mountPath: /var/log/valthree/workload
+      volumes:
+        - name: workload-logs
+          emptyDir: {}
